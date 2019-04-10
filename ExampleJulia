@@ -1,1 +1,13 @@
 print("This is the start of the project")
+
+## Create arrays
+# array filled with random items
+rand(2,2)
+
+# fill an array
+m, n = 5, 5
+for i in 1:m, j in 1:n
+    A[i,j]=i+j
+end
+
+print(A)
