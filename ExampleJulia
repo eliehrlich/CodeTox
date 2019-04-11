@@ -9,7 +9,7 @@ println("y has the value $y and has the type $ty")
 println("the square of y is equal to $(y*y)")
 
 # name of current working directory
-
+pwd()
 
 ## Create arrays
 # one dim array
@@ -26,22 +26,70 @@ A=fill(0,(m,n))
 for i in 1:m, j in 1:n
     A[i,j]=i+j
 end
-
 println(A)
 
-# if clauses
+## if clauses
 x=rand(1)
 if x[1]<0.5
     println("x is smaller 0.5")
-elseif x[1]>0.5 && x[1]<1
+elseif x[1]>0.5 && x[1]<1 # only & --> both conditions are evaluated
+    # && --> if first condition is false, second cond. is not evaluated (more efficient)
     println("x is larger than 0.5, but smaller than 1")
 else
     println("x is equal to 1")
 end
 
-# while loops
+# error output
+NatZahl=1
+(NatZahl<0) && error("NatZahl is smaller than zero")
+# when NatZahl larger zero, no error will appear
+
+## while loops
 global j=0 # while loops demand globally defined variables
 while j < 10
     global j += 1
     println(j)
 end
+
+## functions
+function f(x)
+    x^2
+end
+# the same function in one line
+f2(x)=x^2
+
+println(f(8))
+println(f2(8))
+
+# duck typing --> functions are able to evaluate functions for different input data types
+println(f(A)) # matrix multiplication!!! --> not elementwise squared
+println(f("hi")) # --> for strings ^2 will concatenate strings
+
+# mutating vs. non-mutating functions
+v=[3,5,2]
+sort(v)
+println(v) # v is still the same --> sort() is a non-mutating function
+
+sort!(v)
+println(v) # v is sorted --> sort!() is a mutating function
+
+## higher order functions
+# map
+mf=map(f,[2,3,4]) # f is a function which will be applied to 2,3 and 4 --> output of map is an arrays
+println(mf)
+# combined with anonymous function
+mf1=map(x -> x^2, [2,3,4])
+println(mf1)
+
+# broadcost
+bf=broadcast(f,[2,3,4])
+bf1=f.([2,3,4]) # broadcast function in short
+println(bf)
+println(bf1)
+
+println(f(A)) # matrix multiplication
+println(f.(A)) # elememtwise square
+
+# use of broadcast functions via the "."
+Res=A .+ 2 .* f.(A) ./ A # it is working elementwise with the dot --> like in matlab
+println(Res)
