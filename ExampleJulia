@@ -1,13 +1,47 @@
-print("This is the start of the project")
+println("This is the start of the project")
+
+# type of variable
+y=3.4
+ty=typeof(y)
+
+# reference to a variable in print
+println("y has the value $y and has the type $ty")
+println("the square of y is equal to $(y*y)")
+
+# name of current working directory
+
 
 ## Create arrays
+# one dim array
+Vect=[0,1]
+push!(Vect,2) # add an element at the end
+pop!(Vect) # remove last element
+
 # array filled with random items
 rand(2,2)
 
 # fill an array
 m, n = 5, 5
+A=fill(0,(m,n))
 for i in 1:m, j in 1:n
     A[i,j]=i+j
 end
 
-print(A)
+println(A)
+
+# if clauses
+x=rand(1)
+if x[1]<0.5
+    println("x is smaller 0.5")
+elseif x[1]>0.5 && x[1]<1
+    println("x is larger than 0.5, but smaller than 1")
+else
+    println("x is equal to 1")
+end
+
+# while loops
+global j=0 # while loops demand globally defined variables
+while j < 10
+    global j += 1
+    println(j)
+end
