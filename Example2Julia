@@ -1,5 +1,33 @@
 ## Package manager
-using Pkg
-Pkg.add("Example")
+#using Pkg # use package manager
+#Pkg.add("Colors") # add package
 
-using Example
+#using Colors
+palette=distinguishable_colors(100)
+rand(palette,2,3)
+
+## Plotting
+#Pkg.add("Plots") # add package
+#using Plots
+x=[2,3,5,8,12]
+y=[1,2,3,4,5]
+
+# use different backends (here "gr()"), but Julia can use different backends
+# from python for example --> you don't have to change the code for different
+# style of plot --> just use a different backends
+gr()
+plot(x,y,label="line") # --> a line
+scatter!(x,y,label="points") # --> dots --> "!" = mutate plot --> add dots to previous plot
+xlabel!("x")
+ylabel!("y")
+title!("First plot")
+
+xflip!() # flip the x-axis
+
+## Subplots
+p1=plot(x,x)
+p2=plot(x,x^2)
+p3=plot(x,x^3)
+p4=plot(x,x^4)
+
+plot(p1,p2,p3,p4,layout=(2,2),legend=false)
