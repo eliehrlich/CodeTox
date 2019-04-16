@@ -1,0 +1,36 @@
+## Benchmarking
+a=rand(10^7)
+@time sum(a) # @time is a makro and shows you the time for calculation
+
+#using Pkg
+#Pkg.add("BenchmarkTools")
+using BenchmarkTools
+@benchmark sum(a) # @benchmark is a makro showing test results for calculation time
+
+@which sum(a) # to show the origin of the source code of sum
+
+# hand-written, fast version of sum
+# using simd = single instruction multiple data --> accelerate calculation
+# simd --> one processor core does multiple calculations for different values at the same time
+function mysum_simd(A)
+    s=0.0
+    @simd for a in A
+        s +=a
+    end
+    s
+end
+
+@benchmark mysum_simd(a)
+
+## Multiple dispatch --> define datatype of input --> efficient method for datatype
+foo(x::String, y::String) = println("My inputs $x and $y are both strings")
+foo("hello","hi")
+
+foo(x::Int, y::Int) = println("My inputs $x and $y are both integers")
+foo(3,4)
+# --> the second definition of function foo will not overwrite the first definition
+# --> from now on foo has two methods --> one for strings and one for Int
+
+# show the methods
+methods(foo)
+@which foo(3,4) # --> show which method is used
