@@ -34,3 +34,7 @@ foo(3,4)
 # show the methods
 methods(foo)
 @which foo(3,4) # --> show which method is used
+
+# a more definition for numbers in general (Int64, Float64...)
+foo(x::Number,y::Number) = println("My inputs $x and $y are both numbers")
+foo(3.0,4.0)
