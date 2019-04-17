@@ -1,0 +1,30 @@
+## Basic linear algebra
+A=rand(1:4,3,3)
+x=fill(1.0,(3,)) # defines a vector of ones
+
+# multiplication
+b=A*x
+
+# Tranposition
+A'
+transpose(A) # the same as A'
+
+# Transposed multiplication
+A'A # the same as A'*A
+
+# Solving linear systems
+A\b # \ --> solves the linear system Ax=b
+Atall=rand(3,2)
+Atall\b # for overdetermined systems --> it calculates the least square solution
+
+# Concatenate two vectors
+v=rand(3)
+rankdef=hcat(v,v) # hcat for concatenating
+
+# for rank-defficient least square problems
+rankdef\b # it gives the minimum norm least square solution
+
+# for underdetermined systems
+bshort=rand(2)
+Ashort=rand(2,3)
+Ashort\bshort # it gives the minimum norm solution
