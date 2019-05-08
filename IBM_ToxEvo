@@ -4,122 +4,128 @@
 #                 Date: 08/05/2019                             #
 ################################################################
 # Packages
+using Statistics
 
 # Parameters
 pmax_x=0.6 # maximum probability of a toxic cell to reproduce (double itself)
 pmax_y=0.8 # maximum probability of a non-toxic cell to reproduce (double itself)
 dmax_x=0.2 # maximum probability of a toxic cell to die
 dmax_y=0.2 # maximum probability of a non-toxic cell to die
-m=0.1        # probability of mixture (cell moves to the adjacent patch)
-M=collect(0:0.1:1) # Sequence of Different probabilities of mixture (cell moves to the adjacent patch)
+#m=0.1        # probability of mixture (cell moves to the adjacent patch)
+M=collect(0:0.1:1) # Sequence of different probabilities of mixture (cell moves to the adjacent patch)
 
-K=10       # maximum number of cells per dispatch
+K=50       # maximum number of cells per dispatch
 N_patch=10 # total number of patches
 H=5         # Number of toxic cells at which the death probability is halved
 
 tmax=100   # simulation steps
-N_repl=100     # number of replicates
+N_repl=50     # number of replicates
 
 Init_Nr_X=ceil(Int64,1/20*K*N_patch)    # Initial number of toxic cells (ceil for rounding up to integer number --> minimum number is 1)
 Init_Nr_Y=ceil(Int64,1/10*K*N_patch)     # Initial number of non-toxic cells (ceil for rounding up to integer number --> minimum number is 1)
 
+M_MeanFreq_X=fill(0.0,length(M))
+M_StdFreq_X=fill(0.0,length(M))
 Freq_X=fill(0.0,N_repl) # Storage of results of replicates
 
-for l in 1:N_repl
-    # Initialization
-    global Ax=fill(0,N_patch)      # Spatial grid for toxic cells
-    global Ax1=fill(0,N_patch)     # Transfer spatial grid for toxic cells
-    global Ay=fill(0,N_patch)      # Spatial grid for non-toxic cells
-    global Ay1=fill(0,N_patch)     # Transfer spatial grid for non-toxic cells
-    Init_pos_X=rand(1:N_patch,Init_Nr_X,1) # Initial position of toxic cells
-    Init_pos_Y=rand(1:N_patch,Init_Nr_Y,1) # Initial position of non-toxic cells
+for n in 1:length(M) # different mixture probabilities
+    m=M[n]
+    for l in 1:N_repl # different replicates
+        # Initialization
+        global Ax=fill(0,N_patch)      # Spatial grid for toxic cells
+        global Ax1=fill(0,N_patch)     # Transfer spatial grid for toxic cells
+        global Ay=fill(0,N_patch)      # Spatial grid for non-toxic cells
+        global Ay1=fill(0,N_patch)     # Transfer spatial grid for non-toxic cells
+        Init_pos_X=rand(1:N_patch,Init_Nr_X,1) # Initial position of toxic cells
+        Init_pos_Y=rand(1:N_patch,Init_Nr_Y,1) # Initial position of non-toxic cells
 
-    for i in 1:Init_Nr_X
-        Ax[Init_pos_X[i]]+=1    # fill patches with toxic cells
-    end
-    for i in 1:Init_Nr_Y
-        Ay[Init_pos_Y[i]]+=1    # fill patches with non-toxic cells
-    end
-
-    global Ax1=copy(Ax)
-    global Ay1=copy(Ay)
-
-    # Simulation
-    global t=0 # time initializations
-    while t < tmax
-        global t += 1 # incrementing time
-
-        # Birth and death
-        for i in 1:N_patch # go through all patches
-            # For toxic cells
-            global j=0
-            while j<Ax[i] # go through all cells in a patch
-                px=pmax_x*(1-(Ax[i]+Ay[i])/K) # birth probability
-                dx=dmax_x*(1-Ax[i]/(H+Ax[i])) # death probability
-                if rand()<=px
-                    Ax1[i]+=1                 # Birth
-                end
-                if rand()<=dx
-                    Ax1[i]-=1                 # Death
-                end
-                global j+=1
-            end
-
-            # For non-toxic cells
-            global k=0
-            while k<Ay[i] # go through all cells in a patch
-                py=pmax_y*(1-(Ax[i]+Ay[i])/K) # birth probability
-                dy=dmax_y*(1-Ax[i]/(H+Ax[i])) # death probability
-                if rand()<=py
-                    Ay1[i]+=1                 # Birth
-                end
-                if rand()<=dy
-                    Ay1[i]-=1                 # Death
-                end
-                global k+=1
-            end
+        for i in 1:Init_Nr_X
+            Ax[Init_pos_X[i]]+=1    # fill patches with toxic cells
         end
-        global Ax=copy(Ax1)  # update Ax
-        global Ay=copy(Ay1)  # update Ay
-
-        # Mixture of water volume - altering position of cells
-        for i in 1:N_patch # go through all patches
-            # For toxic cells
-            global j=0
-            while j<Ax[i] # go through all cells in a patch
-                if rand()<=m
-                    Ax1[i]-=1  # remove the cell from the patch
-                    if i==N_patch
-                        Ax1[i-1]+=1 # move the cell to the left
-                    elseif i!=1 && rand()<=0.5
-                        Ax1[i-1]+=1 # move the cell to the left
-                    else
-                        Ax1[i+1]+=1  # move the cell to the right
-                    end
-                end
-                global j+=1
-            end
-
-            # For non-toxic cells
-            global k=0
-            while k<Ay[i] # go through all cells in a patch
-                if rand()<=m
-                    Ay1[i]-=1  # remove the cell from the patch
-                    if i==N_patch
-                        Ay1[i-1]+=1 # move the cell to the left
-                    elseif i!=1 && rand()<=0.5
-                        Ay1[i-1]+=1 # move the cell to the left
-                    else
-                        Ay1[i+1]+=1  # move the cell to the right
-                    end
-                end
-                global k+=1
-            end
+        for i in 1:Init_Nr_Y
+            Ay[Init_pos_Y[i]]+=1    # fill patches with non-toxic cells
         end
-        global Ax=copy(Ax1)  # update Ax
-        global Ay=copy(Ay1)  # update Ay
+
+        global Ax1=copy(Ax)
+        global Ay1=copy(Ay)
+
+        # Simulation
+        global t=0 # time initializations
+        while t < tmax
+            global t += 1 # incrementing time
+
+            # Birth and death
+            for i in 1:N_patch # go through all patches
+                # For toxic cells
+                global j=0
+                while j<Ax[i] # go through all cells in a patch
+                    px=pmax_x*(1-(Ax[i]+Ay[i])/K) # birth probability
+                    dx=dmax_x*(1-Ax[i]/(H+Ax[i])) # death probability
+                    if rand()<=px
+                        Ax1[i]+=1                 # Birth
+                    end
+                    if rand()<=dx
+                        Ax1[i]-=1                 # Death
+                    end
+                    global j+=1
+                end
+
+                # For non-toxic cells
+                global k=0
+                while k<Ay[i] # go through all cells in a patch
+                    py=pmax_y*(1-(Ax[i]+Ay[i])/K) # birth probability
+                    dy=dmax_y*(1-Ax[i]/(H+Ax[i])) # death probability
+                    if rand()<=py
+                        Ay1[i]+=1                 # Birth
+                    end
+                    if rand()<=dy
+                        Ay1[i]-=1                 # Death
+                    end
+                    global k+=1
+                end
+            end
+            global Ax=copy(Ax1)  # update Ax
+            global Ay=copy(Ay1)  # update Ay
+
+            # Mixture of water volume - altering position of cells
+            for i in 1:N_patch # go through all patches
+                # For toxic cells
+                global j=0
+                while j<Ax[i] # go through all cells in a patch
+                    if rand()<=m
+                        Ax1[i]-=1  # remove the cell from the patch
+                        if i==N_patch
+                            Ax1[i-1]+=1 # move the cell to the left
+                        elseif i!=1 && rand()<=0.5
+                            Ax1[i-1]+=1 # move the cell to the left
+                        else
+                            Ax1[i+1]+=1  # move the cell to the right
+                        end
+                    end
+                    global j+=1
+                end
+
+                # For non-toxic cells
+                global k=0
+                while k<Ay[i] # go through all cells in a patch
+                    if rand()<=m
+                        Ay1[i]-=1  # remove the cell from the patch
+                        if i==N_patch
+                            Ay1[i-1]+=1 # move the cell to the left
+                        elseif i!=1 && rand()<=0.5
+                            Ay1[i-1]+=1 # move the cell to the left
+                        else
+                            Ay1[i+1]+=1  # move the cell to the right
+                        end
+                    end
+                    global k+=1
+                end
+            end
+            global Ax=copy(Ax1)  # update Ax
+            global Ay=copy(Ay1)  # update Ay
+        end
+        Freq_X[l]=sum(Ax)/(sum(Ax)+sum(Ay))
     end
-    Freq_X[l]=sum(Ax)/(sum(Ax)+sum(Ay))
+    M_MeanFreq_X[n]=mean(Freq_X)
+    M_StdFreq_X[n]=std(Freq_X)
 end
-
-println(Freq_X)
