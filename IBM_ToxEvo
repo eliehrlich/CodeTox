@@ -6,9 +6,12 @@
 # Packages
 using Statistics
 using Plots
+using Pkg
+Pkg.add("LaTeXStrings")
+using LaTeXStrings
 
 # User interface
-ONE_TIMESERIES=true
+ONE_TIMESERIES=false
 
 # Parameters
 pmax_x=0.7 # maximum probability of a toxic cell to reproduce (double itself)
@@ -17,20 +20,20 @@ dmax_x=0.2 # maximum probability of a toxic cell to die
 dmax_y=0.2 # maximum probability of a non-toxic cell to die
 M=collect(0:0.1:1) # Sequence of different probabilities of mixture (cell moves to the adjacent patch)
 
-K=10       # maximum number of cells per dispatch
-N_patch=10 # total number of patches
-H=5         # Number of toxic cells at which the death probability is halved
+K=10         # maximum number of cells per dispatch
+N_patch=10    # total number of patches
+H=K/2         # Number of toxic cells at which the death probability is halved
 
-tmax=10000   # simulation steps
+tmax=3000   # simulation steps
 N_repl=10     # number of replicates
 
 if (ONE_TIMESERIES)
-    M=0.1
+    M=0
     N=1
 end
 
 Init_Nr_X=ceil(Int64,1/20*K*N_patch)    # Initial number of toxic cells (ceil for rounding up to integer number --> minimum number is 1)
-Init_Nr_Y=ceil(Int64,1/10*K*N_patch)     # Initial number of non-toxic cells (ceil for rounding up to integer number --> minimum number is 1)
+Init_Nr_Y=ceil(Int64,1/2*K*N_patch)     # Initial number of non-toxic cells (ceil for rounding up to integer number --> minimum number is 1)
 
 M_MeanFreq_X=fill(0.0,length(M))
 M_StdFreq_X=fill(0.0,length(M))
@@ -44,8 +47,8 @@ for n in 1:length(M) # different mixture probabilities
         global Ax1=fill(0,N_patch)     # Transfer spatial grid for toxic cells
         global Ay=fill(0,N_patch)      # Spatial grid for non-toxic cells
         global Ay1=fill(0,N_patch)     # Transfer spatial grid for non-toxic cells
-        Init_pos_X=rand(1:N_patch,Init_Nr_X,1) # Initial position of toxic cells
-        Init_pos_Y=rand(1:N_patch,Init_Nr_Y,1) # Initial position of non-toxic cells
+        global Init_pos_X=rand(1:N_patch,Init_Nr_X,1) # Initial position of toxic cells
+        global Init_pos_Y=rand(1:N_patch,Init_Nr_Y,1) # Initial position of non-toxic cells
 
         for i in 1:Init_Nr_X
             Ax[Init_pos_X[i]]+=1    # fill patches with toxic cells
@@ -148,9 +151,14 @@ end
 
 if(ONE_TIMESERIES)
     tt=0:tmax
-    plot(tt[1:100],Freq_X_timeseries[1:100],label="line") # --> a line
-    scatter!(tt[1:100],Freq_X_timeseries[1:100],label="points") # --> dots --> "!" = mutate plot --> add dots to previous plot
-    xlabel!("time")
+    plot(tt[1:tmax],Freq_X_timeseries[1:tmax],label="line") # --> a line
+    scatter!(tt[1:tmax],Freq_X_timeseries[1:tmax],label="points") # --> dots --> "!" = mutate plot --> add dots to previous plot
+    xlabel!("Time")
     ylabel!("Frequency of x")
-    title!("m = $M")
+    ylims!((0.0,1.0))
+    title!("m = $M, K = $K, px_max = $pmax_x")
 end
+
+bar(M, M_MeanFreq_X, yerr = M_StdFreq_X, fillcolor=:grey, linecolor=:black)
+title!(L"$pmax_x$")
+ylims!((-0.05,1.0))

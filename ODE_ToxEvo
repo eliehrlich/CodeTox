@@ -1,0 +1,45 @@
+######################################################################
+# ODE model for evolution of cells producing toxins as a public good #
+#                     Author: Elias Ehrlich                          #
+#                       Date: 10/05/2019                             #
+######################################################################
+# Packages
+using DifferentialEquations
+using Plots
+
+# Parameters (values based on Ehrlich et al. 2018)
+r_x=0.95       # max. growth rate of toxic cells (X)
+r_y=1       # max. growth rate of non-toxic cells (Y)
+m=0.01      # mortality coefficient, m=0.01 corresponds to K=100 if r=1
+a=0.1       # attack rate
+h=0.1       # handling time for 10^3 cells
+ϵ_x=0       # conversion efficiency of 10^3 X cells into Z
+ϵ_y=0.2     # conversion efficiency of 10^3 Y cells into Z
+χ=0.001     # toxicity of X when ingested by Z
+M_B=0.3     # baseline mortality of Z
+
+p=[r_x,r_y,m,a,h,ϵ_x,ϵ_y,χ,M_B]
+
+# Equations
+function toxic(du,u,p,t)
+  X,Y,Z = u
+  r_x,r_y,m,a,h,ϵ_x,ϵ_y,χ,M_B = p
+
+  Rx=r_x-m*(X+Y)
+  Ry=r_y-m*(X+Y)
+  Gx=a*X/(1+a*h*X+a*h*Y)
+  Gy=a*Y/(1+a*h*X+a*h*Y)
+
+  du[1] = dX = Rx*X-Gx*Z
+  du[2] = dY = Ry*Y-Gy*Z
+  du[3] = dZ = (ϵ_x*Gx+ϵ_y*Gy-M_B-χ*Gx)*Z
+end
+
+# Numerical integration
+u0 = [10.0,10.0,10.0]  # initialization
+tspan = (0.0,100.0)
+prob = ODEProblem(toxic,u0,tspan,p)
+@time sol = solve(prob)
+
+# Plot
+plot(sol)

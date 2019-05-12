@@ -1,0 +1,71 @@
+## Packages
+# using Pkg
+# Pkg.update()
+# Pkg.add("DifferentialEquations")
+using DifferentialEquations
+using Plots
+
+
+## Example A: Solving Scalar Equation
+f(u,p,t) = 1.01*u # equation --> du/dt
+u0=1/2 # initialization of u
+tspan = (0.0,1.0) # time span of simulation
+prob = ODEProblem(f,u0,tspan) # define the ODE problem with the arguments: equation function, initial values, time span
+sol = solve(prob,Tsit5(),reltol=1e-8,abstol=1e-8) # solve the ODE problem, Tsit5() is a standard method
+plot(sol,linewidth=5,title="Solution to the linear ODE with a thick line",
+     xaxis="Time (t)",yaxis="u(t) (in μm)",label="My Thick Line!") # legend=false
+plot!(sol.t, t->0.5*exp(1.01t),lw=3,ls=:dash,label="True Solution!")
+
+sol = solve(prob,reltol=1e-6,saveat=0.1) # saveat defines the output stepsize
+sol = solve(prob,reltol=1e-6,save_everystep=false) # save_everystep=false --> will only save the last time step
+
+# Choose the right algorithm --> solve will do it by default, with alg_hints you can specify your demands
+sol = solve(prob,alg_hints=[:stiff],reltol=1e-8,abstol=1e-8)
+
+## Selection of methods
+# AutoTsit5(Rosenbrock23()) handles both stiff and non-stiff equations. This is a good algorithm to use if you know nothing about the equation.
+# BS3() for fast low accuracy non-stiff.
+# Tsit5() for standard non-stiff. This is the first algorithm to try in most cases.
+# Vern7() for high accuracy non-stiff.
+# Rodas4() for stiff equations with Julia-defined types, events, etc.
+# radau() for really high accuracy stiff equations (requires installing ODEInterfaceDiffEq.jl)
+
+
+## Example B: Solving a system of equations
+# function lorenz(du,u,p,t)
+#  du[1] = p[1]*(u[2]-u[1])
+#  du[2] = u[1]*(p[2]-u[3]) - u[2]
+#  du[3] = u[1]*u[2] - p[3]*u[3]
+# end
+
+# for a better overview
+function lorenz(du,u,p,t)
+  x,y,z = u
+  σ,ρ,β = p
+  du[1] = dx = σ*(y-x)
+  du[2] = dy = x*(ρ-z) - y
+  du[3] = dz = x*y - β*z
+end
+
+u0 = [1.0,0.0,0.0]
+tspan = (0.0,100.0)
+p = [10.0,28.0,8/3] # parameters
+prob = ODEProblem(lorenz,u0,tspan,p)
+@time sol = solve(prob)
+
+plot(sol,vars=(1,2,3)) # phase space
+plot(sol,vars=(0,2))   # time series of variable y
+
+
+## Example C: Using other types for systems of equations
+A  = [1. 0  0 -5
+      4 -2  4 -3
+     -4  0  0  1
+      5 -2  2  3]
+u0 = rand(4,2)
+tspan = (0.0,1.0)
+f(u,p,t) = A*u # now A and u are matrices and not vectors --> works also
+prob = ODEProblem(f,u0,tspan)
+@time sol = solve(prob) # @time for showing you the calculation time
+
+plot(sol)

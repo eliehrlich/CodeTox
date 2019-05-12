@@ -1,5 +1,6 @@
 ## Package manager
 #using Pkg # use package manager
+#Pkg.update()
 #Pkg.add("Colors") # add package
 
 using Colors
