@@ -8,17 +8,19 @@ using DifferentialEquations
 using Plots
 
 # Parameters (values based on Ehrlich et al. 2018)
-r_x=0.95       # max. growth rate of toxic cells (X)
-r_y=1       # max. growth rate of non-toxic cells (Y)
+r_x=0.95    # max. growth rate of toxic cells (X)
+r_y=1.0     # max. growth rate of non-toxic cells (Y)
 m=0.01      # mortality coefficient, m=0.01 corresponds to K=100 if r=1
 a=0.1       # attack rate
 h=0.1       # handling time for 10^3 cells
-ϵ_x=0       # conversion efficiency of 10^3 X cells into Z
+ϵ_x=0.0     # conversion efficiency of 10^3 X cells into Z
 ϵ_y=0.2     # conversion efficiency of 10^3 Y cells into Z
 χ=0.001     # toxicity of X when ingested by Z
 M_B=0.3     # baseline mortality of Z
+D=0.01      # diffusion rate
 
 p=[r_x,r_y,m,a,h,ϵ_x,ϵ_y,χ,M_B]
+p_space=[r_x,r_y,m,a,h,ϵ_x,ϵ_y,χ,M_B,D]
 
 # Equations
 function toxic(du,u,p,t)
@@ -35,11 +37,49 @@ function toxic(du,u,p,t)
   du[3] = dZ = (ϵ_x*Gx+ϵ_y*Gy-M_B-χ*Gx)*Z
 end
 
+function toxic_space(du,u,p,t)
+  X1,X2,Y1,Y2,Z1,Z2 = u
+  r_x,r_y,m,a,h,ϵ_x,ϵ_y,χ,M_B = p
+
+  Rx1=r_x-m*(X1+Y1)
+  Ry1=r_y-m*(X1+Y1)
+  Gx1=a*X1/(1+a*h*X1+a*h*Y1)
+  Gy1=a*Y1/(1+a*h*X1+a*h*Y1)
+  Rx2=r_x-m*(X2+Y2)
+  Ry2=r_y-m*(X2+Y2)
+  Gx2=a*X2/(1+a*h*X2+a*h*Y2)
+  Gy2=a*Y2/(1+a*h*X2+a*h*Y2)
+
+  du[1] = dX1 = Rx1*X1-Gx1*Z1+D*(X2-X1)
+  du[2] = dX2 = Rx2*X2-Gx2*Z2+D*(X1-X2)
+  du[3] = dY1 = Ry1*Y1-Gy1*Z1+D*(Y2-Y1)
+  du[4] = dY2 = Ry2*Y2-Gy2*Z2+D*(Y1-Y2)
+  du[5] = dZ1 = (ϵ_x*Gx1+ϵ_y*Gy1-M_B-χ*Gx1)*Z1+D*(Z2-Z1)
+  du[6] = dZ2 = (ϵ_x*Gx2+ϵ_y*Gy2-M_B-χ*Gx2)*Z2+D*(Z1-Z2)
+end
+
 # Numerical integration
 u0 = [10.0,10.0,10.0]  # initialization
+u0_space=[100.0,10.0,10.0,10.0,10.0,10.0]
 tspan = (0.0,100.0)
 prob = ODEProblem(toxic,u0,tspan,p)
 @time sol = solve(prob)
 
+prob_space = ODEProblem(toxic_space,u0_space,tspan,p_space)
+@time sol_space = solve(prob_space)
+
 # Plot
 plot(sol)
+xlabel!("Time")
+ylabel!("Population density")
+
+savefig(raw"D:\\Forschung\Denmark Ocean Life\Toxicity Project\Figures\ODE_Model\ODE") #raw is useful if some names of foldes include white space
+
+
+p1=plot(sol_space,vars=[1,3,5],title="Patch 1")
+p2=plot(sol_space,vars=[2,4,6],title="Patch 2")
+plot(p1,p2,layout=(1,2),legend=false)
+xlabel!("Time")
+ylabel!("Population density")
+
+savefig(raw"D:\\Forschung\Denmark Ocean Life\Toxicity Project\Figures\ODE_Model\ODE_space")

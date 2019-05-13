@@ -53,8 +53,15 @@ p = [10.0,28.0,8/3] # parameters
 prob = ODEProblem(lorenz,u0,tspan,p)
 @time sol = solve(prob)
 
-plot(sol,vars=(1,2,3)) # phase space
+plot(sol,vars=(1,2,3)) # 3D phase space
 plot(sol,vars=(0,2))   # time series of variable y
+plot(sol,vars=[1,2,3])
+
+# DifferentialEquations Array interface
+sol[2] #to access the values at timestep 2 (if it is a multidimensional array, i.e. multiple state variables --> this will be a vector)
+sol.t[2] #to access the value of t at timestep 2
+sol[2,3] #sol[i,j,k]
+sol[3,:] #gives the timeseries for the 3th component.
 
 
 ## Example C: Using other types for systems of equations
@@ -69,3 +76,5 @@ prob = ODEProblem(f,u0,tspan)
 @time sol = solve(prob) # @time for showing you the calculation time
 
 plot(sol)
+
+sol[2,4,3] #gives the [2,4] component of the system at timestep 3

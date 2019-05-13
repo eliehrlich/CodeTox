@@ -7,8 +7,6 @@
 using Statistics
 using Plots
 using Pkg
-Pkg.add("LaTeXStrings")
-using LaTeXStrings
 
 # User interface
 ONE_TIMESERIES=false
@@ -25,7 +23,7 @@ N_patch=10    # total number of patches
 H=K/2         # Number of toxic cells at which the death probability is halved
 
 tmax=3000   # simulation steps
-N_repl=10     # number of replicates
+N_repl=100     # number of replicates
 
 if (ONE_TIMESERIES)
     M=0
@@ -159,6 +157,10 @@ if(ONE_TIMESERIES)
     title!("m = $M, K = $K, px_max = $pmax_x")
 end
 
-bar(M, M_MeanFreq_X, yerr = M_StdFreq_X, fillcolor=:grey, linecolor=:black)
-title!(L"$pmax_x$")
+bar(M, M_MeanFreq_X, yerr = M_StdFreq_X, fillcolor=:grey, linecolor=:black,legend=false)
+title!("K = $K")
+xlabel!("Mixture probability m")
+ylabel!("Mean frequency of X")
 ylims!((-0.05,1.0))
+
+savefig(raw"D:\\Forschung\Denmark Ocean Life\Toxicity Project\Figures\IBM\IBM_MultiCell_K$K")
