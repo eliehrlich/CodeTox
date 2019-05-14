@@ -6,7 +6,6 @@
 # Packages
 using Statistics
 using Plots
-using Pkg
 
 include("./IBM_FunctModule")
 using .IBM_FunctModule
