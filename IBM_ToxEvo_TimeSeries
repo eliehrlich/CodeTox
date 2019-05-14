@@ -1,0 +1,60 @@
+################################################################
+# IBM for evolution of cells producing toxins as a public good #
+#               Author: Elias Ehrlich                          #
+#                 Date: 08/05/2019                             #
+################################################################
+# Packages
+using Statistics
+using Plots
+using Pkg
+
+include("./IBM_FunctModule")
+using .IBM_FunctModule
+
+# Parameters
+pmax_x=0.7 # maximum probability of a toxic cell to reproduce (double itself)
+pmax_y=0.8 # maximum probability of a non-toxic cell to reproduce (double itself)
+dmax_x=0.2 # maximum probability of a toxic cell to die
+dmax_y=0.2 # maximum probability of a non-toxic cell to die
+m=0.1 # probability of mixture (cell moves to the adjacent patch)
+
+K=10          # maximum number of cells per dispatch
+H=K/2         # Number of toxic cells at which the death probability is halved
+N_patch=10    # total number of patches
+tmax=3000     # simulation steps
+
+Init_Nr_X=ceil(Int64,1/20*K*N_patch)    # Initial number of toxic cells (ceil for rounding up to integer number --> minimum number is 1)
+Init_Nr_Y=ceil(Int64,1/2*K*N_patch)     # Initial number of non-toxic cells (ceil for rounding up to integer number --> minimum number is 1)
+
+M_MeanFreq_X=fill(0.0,length(M))
+M_StdFreq_X=fill(0.0,length(M))
+Freq_X=fill(0.0,N_repl) # Storage of results of replicates
+
+# Initialization
+Ax=fill(0,N_patch)      # Spatial grid for toxic cells
+Ay=fill(0,N_patch)      # Spatial grid for non-toxic cells
+Init_pos_X=rand(1:N_patch,Init_Nr_X,1) # Initial position of toxic cells
+Init_pos_Y=rand(1:N_patch,Init_Nr_Y,1) # Initial position of non-toxic cells
+for i in 1:Init_Nr_X; Ax[Init_pos_X[i]]+=1 end    # fill patches with toxic cells
+for i in 1:Init_Nr_Y; Ay[Init_pos_Y[i]]+=1 end    # fill patches with non-toxic cells
+
+Freq_X_timeseries=fill(0.0,(tmax+1,))
+Freq_X_timeseries[1]=sum(Ax)/(sum(Ax)+sum(Ay))
+
+# Simulation
+for t in 1:tmax
+    Ax, Ay = IBM_FunctModule.MultiCell(Ax,Ay,N_patch,pmax_x,pmax_y,K,dmax_x,dmax_y,H,m)
+    Freq_X_timeseries[t+1]=sum(Ax)/(sum(Ax)+sum(Ay))
+end
+Freq_X[l]=sum(Ax)/(sum(Ax)+sum(Ay))
+
+
+tt=0:tmax
+plot(tt[1:tmax],Freq_X_timeseries[1:tmax],label="line") # --> a line
+scatter!(tt[1:tmax],Freq_X_timeseries[1:tmax],label="points") # --> dots --> "!" = mutate plot --> add dots to previous plot
+xlabel!("Time")
+ylabel!("Frequency of x")
+ylims!((0.0,1.0))
+title!("m = $M, K = $K, pmax_x = $pmax_x")
+
+#savefig(raw"D:\\Forschung\Denmark Ocean Life\Toxicity Project\Figures\IBM\IBM_MultiCell_K$K")
