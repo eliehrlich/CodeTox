@@ -13,7 +13,8 @@ module IBM_FunctModule
             # For toxic cells
             for j in 1:Ax[i] # go through all cells in a patch
                 px=pmax_x*(1-(Ax[i]+Ay[i])/K) # birth probability
-                dx=dmax_x*(1-Ax[i]/(H+Ax[i])) # death probability
+                #dx=dmax_x*(1-Ax[i]/(H+Ax[i])) # death probability
+                dx=dmax_x*(1-Ax[i]/K) # death probability
                 if rand()<=px;
                     Ax1[i]+=1                 # Birth
                 end
@@ -25,7 +26,8 @@ module IBM_FunctModule
             # For non-toxic cells
             for k in 1:Ay[i] # go through all cells in a patch
                 py=pmax_y*(1-(Ax[i]+Ay[i])/K) # birth probability
-                dy=dmax_y*(1-Ax[i]/(H+Ax[i])) # death probability
+                #dy=dmax_y*(1-Ax[i]/(H+Ax[i])) # death probability
+                dy=dmax_y*(1-Ax[i]/K) # death probability
                 if rand()<=py
                     Ay1[i]+=1                 # Birth
                 end

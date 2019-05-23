@@ -11,20 +11,20 @@ include("./IBM_FunctModule")
 using .IBM_FunctModule
 
 # Parameters
-pmax_x=0.7 # maximum probability of a toxic cell to reproduce (double itself)
+pmax_x=0.78 # maximum probability of a toxic cell to reproduce (double itself)
 pmax_y=0.8 # maximum probability of a non-toxic cell to reproduce (double itself)
-dmax_x=0.2 # maximum probability of a toxic cell to die
-dmax_y=0.2 # maximum probability of a non-toxic cell to die
+dmax_x=0.6 # maximum probability of a toxic cell to die
+dmax_y=0.6 # maximum probability of a non-toxic cell to die
 M=collect(0:0.02:0.2) # Sequence of different probabilities of mixture (cell moves to the adjacent patch)
 
-K=50         # maximum number of cells per dispatch
-H=K/2         # Number of toxic cells at which the death probability is halved
-N_patch=10    # total number of patches
-tmax=5000   # simulation steps
+K=1000         # maximum number of cells per dispatch
+H=K/2          # Number of toxic cells at which the death probability is halved
+N_patch=10     # total number of patches
+tmax=10000     # simulation steps
 
-N_repl=100     # number of replicates
+N_repl=10     # number of replicates
 
-Init_Nr_X=ceil(Int64,1/20*K*N_patch)    # Initial number of toxic cells (ceil for rounding up to integer number --> minimum number is 1)
+Init_Nr_X=ceil(Int64,1/2*K*N_patch)    # Initial number of toxic cells (ceil for rounding up to integer number --> minimum number is 1)
 Init_Nr_Y=ceil(Int64,1/2*K*N_patch)     # Initial number of non-toxic cells (ceil for rounding up to integer number --> minimum number is 1)
 
 M_MeanFreq_X=fill(0.0,length(M))
@@ -54,10 +54,10 @@ end
 
 Zeros=repeat([0],outer=length(M_StdFreq_X)) #for the lower error bar to hide (length of zero)
 
-bar(M, M_MeanFreq_X, yerr = (Zeros,M_StdFreq_X), fillcolor=:grey, linecolor=:black,legend=false)
+bar(M, M_MeanFreq_X, yerr = (Zeros,M_StdFreq_X), fillcolor=:grey, linecolor=:black,msc=:black,legend=false)
 title!("K = $K")
 xlabel!("Mixture probability m")
 ylabel!("Mean frequency of X")
-ylims!((-0.05,1.0))
+ylims!((-0.05,1.2))
 
-savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\IBM\\IBM_MultiCell_K$K")
+savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\IBM\\IBM_MultiCell_K$(K)_d$dmax_x")
