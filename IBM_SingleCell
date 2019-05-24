@@ -1,0 +1,193 @@
+################################################################
+# IBM for evolution of cells producing toxins as a public good #
+#               Author: Elias Ehrlich                          #
+#                 Date: 08/05/2019                             #
+################################################################
+# Packages
+using Statistics
+using StatsBase
+using Plots
+
+include("./IBM_FunctModule")
+using .IBM_FunctModule
+
+function SingleCell(A_init,N_patch1,N_patch2,K,bx,by,M)
+    A=copy(A_init)
+    A1=copy(A_init)
+
+    ## Birth
+    PE=findall(x->x==0,A) # find position of empty patches, where reproduction is possible
+
+    for i in 1:length(PE)   # go through all empty
+        pe1=PE[i][1]    # position of empty patches along the first dimension
+        pe1_pre=mod(pe1-2,N_patch1)+1
+        pe1_post=mod(pe1,N_patch1)+1
+        pe2=PE[i][2]  # position of empty patches along the second dimension
+        pe2_pre=mod(pe2-2,N_patch2)+1
+        pe2_post=mod(pe2,N_patch2)+1
+        NX=count(x->x==1,A[[pe1_pre,pe1,pe1_post],[pe2_pre,pe2,pe2_post]]) # Number of adjacent toxic cells
+        NY=count(x->x==2,A[[pe1_pre,pe1,pe1_post],[pe2_pre,pe2,pe2_post]]) # Number of adjacent non-toxic cells
+
+        if rand()<NX/(NX+NY) # an adjacent X may reproduce
+            if rand()<bx     # does this X reproduce
+                A1[pe1,pe2]=1
+            end
+        elseif rand()<by
+            A1[pe1,pe2]=2
+        end
+    end
+
+    ## Death
+    PX=findall(x->x==1,A) # find position of all patches with toxic cells
+    PY=findall(x->x==2,A) # find position of all patches with non-toxic cells
+
+    # for toxic cells
+    for i in 1:length(PX)
+        px1=PX[i][1]    # position of toxic patches along the first dimension
+        px1_pre=mod(px1-2,N_patch1)+1
+        px1_post=mod(px1,N_patch1)+1
+        px2=PX[i][2]  # position of toxic patches along the second dimension
+        px2_pre=mod(px2-2,N_patch2)+1
+        px2_post=mod(px2,N_patch2)+1
+        NXx=count(x->x==1,A[[px1_pre,px1,px1_post],[px2_pre,px2,px2_post]]) # Number of adjacent toxic cells
+        NXx=NXx-1   # -1 = without 'private' good (the focal toxic cell itself does not count)
+
+        dx=dmax(1-NXx/K)
+        if rand()<dx
+            A1[px1,px2]=0
+        end
+    end
+
+    # for non-toxic cells
+    for i in 1:length(PY)
+        py1=PY[i][1]    # position of toxic patches along the first dimension
+        py1_pre=mod(py1-2,N_patch1)+1
+        py1_post=mod(py1,N_patch1)+1
+        py2=PY[i][2]  # position of toxic patches along the second dimension
+        py2_pre=mod(py2-2,N_patch2)+1
+        py2_post=mod(py2,N_patch2)+1
+        NXy=count(x->x==1,A[[py1_pre,py1,py1_post],[py2_pre,py2,py2_post]]) # Number of adjacent toxic cells
+
+        dy=dmax(1-NXy/K)
+        if rand()<dy
+            A1[py1,py2]=0
+        end
+    end
+
+    A=copy(A1)  # update A
+
+    ## Mixture
+
+
+    # Birth and death
+    for i in 1:N_patch # go through all patches
+        # For toxic cells
+        for j in 1:Ax[i] # go through all cells in a patch
+            px=pmax_x*(1-(Ax[i]+Ay[i])/K) # birth probability
+            #dx=dmax_x*(1-Ax[i]/(H+Ax[i])) # death probability
+            dx=dmax_x*(1-Ax[i]/K) # death probability
+            if rand()<=px;
+                Ax1[i]+=1                 # Birth
+            end
+            if rand()<=dx
+                Ax1[i]-=1                 # Death
+            end
+        end
+
+        # For non-toxic cells
+        for k in 1:Ay[i] # go through all cells in a patch
+            py=pmax_y*(1-(Ax[i]+Ay[i])/K) # birth probability
+            #dy=dmax_y*(1-Ax[i]/(H+Ax[i])) # death probability
+            dy=dmax_y*(1-Ax[i]/K) # death probability
+            if rand()<=py
+                Ay1[i]+=1                 # Birth
+            end
+            if rand()<=dy
+                Ay1[i]-=1                 # Death
+            end
+        end
+    end
+
+    Ax=copy(Ax1)  # update Ax
+    Ay=copy(Ay1)  # update Ay
+
+    # Mixture of water volume - altering position of cells
+    for i in 1:N_patch # go through all patches
+        # For toxic cells
+        for j in 1:Ax[i] # go through all cells in a patch
+            if rand()<=m
+                Ax1[i]-=1  # remove the cell from the patch
+                if rand()<=0.5
+                    if i!=1
+                        Ax1[i-1]+=1 # move the cell to the left
+                    else #i==1 -> first element/left margin
+                        Ax1[N_patch]+=1 # move from the first element to the last element (torus)
+                    end
+                else
+                    if i!=N_patch
+                        Ax1[i+1]+=1  # move the cell to the right
+                    else #i==N_patch -> last element/right margin
+                        Ax1[1]+=1 # move from the last element to the first element (torus)
+                    end
+                end
+            end
+        end
+
+        # For non-toxic cells
+        for k in 1:Ay[i] # go through all cells in a patch
+            if rand()<=m
+                Ay1[i]-=1  # remove the cell from the patch
+                if rand()<=0.5
+                    if i!=1
+                        Ay1[i-1]+=1 # move the cell to the left
+                    else #i==1 -> first element/left margin
+                        Ay1[N_patch]+=1 # move from the first element to the last element (torus)
+                    end
+                else
+                    if i!=N_patch
+                        Ay1[i+1]+=1  # move the cell to the right
+                    else #i==N_patch -> last element/right margin
+                        Ay1[1]+=1 # move from the last element to the first element (torus)
+                    end
+                end
+            end
+        end
+    end
+
+    return Ax1, Ay1
+end #function
+
+
+
+# Parameters
+
+K=9             # Number of interacting cells
+N_patch1=10     # Number of patches in first dimension
+N_patch2=10     # Number of patches in second dimension
+tmax=100        # simulation steps
+
+Init_Nr_X=ceil(Int64,1/10*N_patch1*N_patch2)    # Initial number of toxic cells (ceil for rounding up to integer number --> minimum number is 1)
+Init_Nr_Y=ceil(Int64,1/2*N_patch1*N_patch2)     # Initial number of non-toxic cells (ceil for rounding up to integer number --> minimum number is 1)
+
+# Initialization
+A=fill(0,(N_patch1,N_patch2))      # Spatial grid for toxic cells
+Init_pos = sample(1:(N_patch1*N_patch2), Init_Nr_X+Init_Nr_Y, replace = false) # Initial position of toxic and non-toxic cells
+for i in 1:Init_Nr_X; A[Init_pos[i]]=1 end    # fill patches with toxic cells
+for i in (Init_Nr_X+1):length(Init_pos); A[Init_pos[i]]=2 end    # fill patches with non-toxic cells
+
+# Simulation
+for t in 1:tmax
+    Ax, Ay = IBM_FunctModule.MultiCell(Ax,Ay,N_patch,pmax_x,pmax_y,K,dmax_x,dmax_y,H,m)
+end
+Freq_X[l]=sum(Ax)/(sum(Ax)+sum(Ay)) #Frequency at the end of the simulations
+
+
+Zeros=repeat([0],outer=length(M_StdFreq_X)) #for the lower error bar to hide (length of zero)
+
+bar(M, M_MeanFreq_X, yerr = (Zeros,M_StdFreq_X), fillcolor=:grey, linecolor=:black,msc=:black,legend=false)
+title!("K = $K")
+xlabel!("Mixture probability m")
+ylabel!("Mean frequency of X")
+ylims!((-0.05,1.2))
+
+savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\IBM\\IBM_MultiCell_K$(K)_d$dmax_x")
