@@ -14,8 +14,7 @@ using Random
 #Random.seed!(1234)
 
 ## Parameters
-L=100        # initial patches in a LxL square
-tmax=1000     # simulation steps
+tmax=10     # simulation steps
 N0=20000      # initial number of cells
 Δ=0.001      # root mean square (standard dev.) of Gaussian distributed random variable
 U=0.1        # amplitude of turbulence movement wave
@@ -38,20 +37,20 @@ for t in 1:tmax
     # diffusion
     dx=rand(Normal(0,Δ),size(A,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
     dy=rand(Normal(0,Δ),size(A,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-    A[:,1]=A[:,1].+dx
-    A[:,2]=A[:,2].+dy
+    A[:,1]=mod.(A[:,1].+dx,1)          # modulo for torus
+    A[:,2]=mod.(A[:,2].+dy,1)          # modulo for torus
 
     # turbulence
     phi=rand()*2*pi     # for turbulence in x-direction
     theta=rand()*2*pi   # for turbulence in y-direction
     ddx=U.*cos.(2*pi*A[:,2].+phi) # movement in x-direction
-    A[:,1]=A[:,1].+ddx
+    A[:,1]=mod.(A[:,1].+ddx,1)
     ddy=U.*cos.(2*pi*A[:,1].+theta)
-    A[:,2]=A[:,2].+ddy
+    A[:,2]=mod.(A[:,2].+ddy,1)
 end
 
 scatter(A[:,1],A[:,2],zcolor=A[:,3],m=:rainbow,xlabel="x",ylabel="y",
-    mc=:green,msc=:black,ms=2,msw=0.5,
+    mc=:green,msc=:black,ms=1.8,msw=0.0,
     legend=false,dpi=600)
 xlims!((0.0,1.0))
 ylims!((0.0,1.0))

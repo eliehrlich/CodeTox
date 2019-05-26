@@ -15,7 +15,6 @@ using .IBM_FunctModule
 # User Interface
 ANIM=true   # Animation ON/OFF
 
-a=1
 # Parameters
 pmax_x=0.8 # maximum probability of a toxic cell to reproduce (double itself)
 pmax_y=0.8 # maximum probability of a non-toxic cell to reproduce (double itself)
