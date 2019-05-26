@@ -1,0 +1,34 @@
+################################################################
+# IBM for evolution of cells producing toxins as a public good #
+#               Author: Elias Ehrlich                          #
+#                 Date: 26/05/2019                             #
+################################################################
+## Packages
+using Statistics
+using StatsBase
+using Plots
+#using DataFrames
+
+## Parameters
+L=100        # initial patches in a LxL square
+tmax=100     # simulation steps
+N0=1000      # initial number of cells
+Δ=0.001      # root mean square of Gaussian distributed random variable
+U=0.1        # amplitude of turbulence movement wave
+p=0.25       # birth probability
+q=0.25       # death probability
+
+## Initialization
+A=rand(N0,2)   # Cells --> random x- and y-positions between 0 and 1
+
+# demography
+rv=rand(size(A,1))                              # random variable for demography
+CellsSurv=findall(x->x>q,rv)                    # row numbers of surviving cells
+A=A[CellsSurv,:]                                # remove dead cells
+CellsReprod=findall(x->x>(1-p),rv[CellsSurv])   # row number of reproducing cells
+A=vcat(A,A[CellsReprod,:])                      # add offsprings --> same position as parents
+
+## Simulation
+for t in 1:tmax
+
+end
