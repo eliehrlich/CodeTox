@@ -4,8 +4,6 @@
 #                 Date: 26/05/2019                             #
 ################################################################
 ## Packages
-using Statistics
-using StatsBase
 using Plots
 using Colors
 using Distributions
@@ -14,6 +12,7 @@ using Random
 #Random.seed!(1234)
 
 ## Parameters
+L=10^4      # Number of discrete 'positions' per dimension (resolution 0.0001)
 tmax=100    # simulation steps
 N0=4000     # initial number of cells
 c0=0.1       # initial frequency of toxic cells
@@ -25,14 +24,24 @@ pD=0.28       # birth probability of non-toxic cells
 qD=0.25       # death probability of non-toxic cells
 
 ## Initialization
-global AC = rand(floor(Int,c0*N0),2)   # Toxic cells --> random x- and y-positions between 0 and 1
-global AD = rand(floor(Int,(1-c0)*N0),2)   # Non-toxic cells --> random x- and y-positions between 0 and 1
+global AC = rand(0:L,(floor(Int,c0*N0),2))  # Toxic cells --> random x- and y-positions between 0 and L
+global AD = rand(0:L,(floor(Int,(1-c0)*N0),2))  # Non-toxic cells --> random x- and y-positions between 0 and L
 
 global AC1=copy(AC)
 global AD1=copy(AD)
 
+scatter(AD[:,1].*10^-4,AD[:,2].*10^-4,xlabel="x",ylabel="y",
+    mc=:steelblue,msc=:black,ms=2,msw=0.0,
+    legend=false,dpi=600,reuse=false)
+scatter!(AC[:,1].*10^-4,AC[:,2].*10^-4,mc=:red,msc=:black,ms=2,msw=0.0)
+xlims!((0.0,1.0))
+ylims!((0.0,1.0))
+
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
+
+
 ### Simulation
-@time for t in 1:tmax
+for t in 1:tmax
     ## demography
     # toxic cells
     rv=rand(size(AC,1))                              # random variable for demography
@@ -54,35 +63,43 @@ global AD1=copy(AD)
     # toxic cells
     dxC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
     dyC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-    AC[:,1]=mod.(AC[:,1].+dxC,1)          # modulo for torus
-    AC[:,2]=mod.(AC[:,2].+dyC,1)          # modulo for torus
+    dxC=floor.(Int,dxC.*L)                # discretizing
+    dyC=floor.(Int,dyC.*L)                # discretizing
+    AC[:,1]=mod.(AC[:,1].+dxC,L)          # modulo for torus
+    AC[:,2]=mod.(AC[:,2].+dyC,L)          # modulo for torus
     # non-toxic cells
     dxD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
     dyD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-    AD[:,1]=mod.(AD[:,1].+dxD,1)          # modulo for torus
-    AD[:,2]=mod.(AD[:,2].+dyD,1)          # modulo for torus
+    dxD=floor.(Int,dxD.*L)                # discretizing
+    dyD=floor.(Int,dyD.*L)                # discretizing
+    AD[:,1]=mod.(AD[:,1].+dxD,L)         # modulo for torus
+    AD[:,2]=mod.(AD[:,2].+dyD,L)         # modulo for torus
 
-    ## turbulence
-    phi=rand()*2*pi     # for turbulence in x-direction
-    theta=rand()*2*pi   # for turbulence in y-direction
-    # toxic cells
-    ddxC=U.*cos.(2*pi*AC[:,2].+phi) # movement in x-direction
-    AC[:,1]=mod.(AC[:,1].+ddxC,1)
-    ddyC=U.*cos.(2*pi*AC[:,1].+theta)
-    AC[:,2]=mod.(AC[:,2].+ddyC,1)
-    # non-toxic cells
-    ddxD=U.*cos.(2*pi*AD[:,2].+phi) # movement in x-direction
-    AD[:,1]=mod.(AD[:,1].+ddxD,1)
-    ddyD=U.*cos.(2*pi*AD[:,1].+theta)
-    AD[:,2]=mod.(AD[:,2].+ddyD,1)
+    # ## turbulence
+    # phi=rand()*2*pi     # for turbulence in x-direction
+    # theta=rand()*2*pi   # for turbulence in y-direction
+    # # toxic cells
+    # ddxC=U.*cos.(2*pi*AC[:,2].+phi) # movement in x-direction
+    # ddxC=floor.(Int,ddxC.*L)                # discretizing
+    # AC[:,1]=mod.(AC[:,1].+ddxC,L)
+    # ddyC=U.*cos.(2*pi*AC[:,1].+theta)
+    # ddyC=floor.(Int,ddyC.*L)                # discretizing
+    # AC[:,2]=mod.(AC[:,2].+ddyC,L)
+    # # non-toxic cells
+    # ddxD=U.*cos.(2*pi*AD[:,2].+phi) # movement in x-direction
+    # ddxD=floor.(Int,ddxD.*L)                # discretizing
+    # AD[:,1]=mod.(AD[:,1].+ddxD,L)
+    # ddyD=U.*cos.(2*pi*AD[:,1].+theta)
+    # ddyD=floor.(Int,ddyD.*L)                # discretizing
+    # AD[:,2]=mod.(AD[:,2].+ddyD,L)
 end
 
-scatter(AD[:,1],AD[:,2],xlabel="x",ylabel="y",
+scatter(AD[:,1].*10^-4,AD[:,2].*10^-4,xlabel="x",ylabel="y",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
-    legend=false,dpi=600)
-scatter!(AC[:,1],AC[:,2],mc=:red,msc=:black,ms=1.8,msw=0.0)
+    legend=false,dpi=600,reuse=false)
+scatter!(AC[:,1].*10^-4,AC[:,2].*10^-4,mc=:red,msc=:black,ms=1.8,msw=0.0)
 xlims!((0.0,1.0))
 ylims!((0.0,1.0))
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
-savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")
