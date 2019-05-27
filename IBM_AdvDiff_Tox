@@ -16,7 +16,7 @@ L=10^4      # Number of discrete 'positions' per dimension (resolution 0.0001)
 tmax=100    # simulation steps
 N0=4000     # initial number of cells
 c0=0.1       # initial frequency of toxic cells
-Δ=0.001      # root mean square (standard dev.) of Gaussian distributed random variable
+Δ=0.001      # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
 U=0.1        # amplitude of turbulence movement wave
 pC=0.25       # birth probability of toxic cells
 qC=0.25       # death probability of toxic cells
@@ -38,7 +38,6 @@ xlims!((0.0,1.0))
 ylims!((0.0,1.0))
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
-
 
 ### Simulation
 for t in 1:tmax
@@ -93,6 +92,13 @@ for t in 1:tmax
     # ddyD=floor.(Int,ddyD.*L)                # discretizing
     # AD[:,2]=mod.(AD[:,2].+ddyD,L)
 end
+
+## Calculate toxicity environment
+# initiate
+Tox=
+
+
+rand(MvNormal(1,0.01),1)
 
 scatter(AD[:,1].*10^-4,AD[:,2].*10^-4,xlabel="x",ylabel="y",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
