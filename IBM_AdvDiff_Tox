@@ -1,0 +1,88 @@
+################################################################
+# IBM for evolution of cells producing toxins as a public good #
+#               Author: Elias Ehrlich                          #
+#                 Date: 26/05/2019                             #
+################################################################
+## Packages
+using Statistics
+using StatsBase
+using Plots
+using Colors
+using Distributions
+using Random
+
+#Random.seed!(1234)
+
+## Parameters
+tmax=100    # simulation steps
+N0=4000     # initial number of cells
+c0=0.1       # initial frequency of toxic cells
+Δ=0.001      # root mean square (standard dev.) of Gaussian distributed random variable
+U=0.1        # amplitude of turbulence movement wave
+pC=0.25       # birth probability of toxic cells
+qC=0.25       # death probability of toxic cells
+pD=0.28       # birth probability of non-toxic cells
+qD=0.25       # death probability of non-toxic cells
+
+## Initialization
+global AC = rand(floor(Int,c0*N0),2)   # Toxic cells --> random x- and y-positions between 0 and 1
+global AD = rand(floor(Int,(1-c0)*N0),2)   # Non-toxic cells --> random x- and y-positions between 0 and 1
+
+global AC1=copy(AC)
+global AD1=copy(AD)
+
+### Simulation
+@time for t in 1:tmax
+    ## demography
+    # toxic cells
+    rv=rand(size(AC,1))                              # random variable for demography
+    CellsSurv=findall(x->x>qC,rv)                    # row numbers of surviving cells
+    global AC1=AC[CellsSurv,:]                                # remove dead cells
+    CellsReprod=findall(x->x>(1-pC),rv[CellsSurv])   # row number of reproducing cells
+    global AC1=vcat(AC1,AC1[CellsReprod,:])
+    # non-toxic cells                      # add offsprings --> same position as parents
+    rv=rand(size(AD,1))                              # random variable for demography
+    CellsSurv=findall(x->x>qD,rv)                    # row numbers of surviving cells
+    global AD1=AD[CellsSurv,:]                                # remove dead cells
+    CellsReprod=findall(x->x>(1-pD),rv[CellsSurv])   # row number of reproducing cells
+    global AD1=vcat(AD1,AD1[CellsReprod,:])
+
+    global AC = copy(AC1)   # update matrices
+    global AD = copy(AD1)   # update matrices
+
+    ## diffusion
+    # toxic cells
+    dxC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+    dyC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+    AC[:,1]=mod.(AC[:,1].+dxC,1)          # modulo for torus
+    AC[:,2]=mod.(AC[:,2].+dyC,1)          # modulo for torus
+    # non-toxic cells
+    dxD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+    dyD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+    AD[:,1]=mod.(AD[:,1].+dxD,1)          # modulo for torus
+    AD[:,2]=mod.(AD[:,2].+dyD,1)          # modulo for torus
+
+    ## turbulence
+    phi=rand()*2*pi     # for turbulence in x-direction
+    theta=rand()*2*pi   # for turbulence in y-direction
+    # toxic cells
+    ddxC=U.*cos.(2*pi*AC[:,2].+phi) # movement in x-direction
+    AC[:,1]=mod.(AC[:,1].+ddxC,1)
+    ddyC=U.*cos.(2*pi*AC[:,1].+theta)
+    AC[:,2]=mod.(AC[:,2].+ddyC,1)
+    # non-toxic cells
+    ddxD=U.*cos.(2*pi*AD[:,2].+phi) # movement in x-direction
+    AD[:,1]=mod.(AD[:,1].+ddxD,1)
+    ddyD=U.*cos.(2*pi*AD[:,1].+theta)
+    AD[:,2]=mod.(AD[:,2].+ddyD,1)
+end
+
+scatter(AD[:,1],AD[:,2],xlabel="x",ylabel="y",
+    mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
+    legend=false,dpi=600)
+scatter!(AC[:,1],AC[:,2],mc=:red,msc=:black,ms=1.8,msw=0.0)
+xlims!((0.0,1.0))
+ylims!((0.0,1.0))
+
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
+savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")

@@ -14,7 +14,7 @@ using Random
 #Random.seed!(1234)
 
 ## Parameters
-tmax=1000     # simulation steps
+tmax=100     # simulation steps
 N0=20000      # initial number of cells
 Δ=0.001      # root mean square (standard dev.) of Gaussian distributed random variable
 U=0.1        # amplitude of turbulence movement wave
@@ -26,7 +26,7 @@ global A = rand(N0,2)   # Cells --> random x- and y-positions between 0 and 1
 A=hcat(A,A[:,2])        # add 3rd column --> initial y (origin)
 
 ## Simulation
-@time for t in 1:tmax
+@time anim = @animate for t in 1:tmax
     # demography
     rv=rand(size(A,1))                              # random variable for demography
     CellsSurv=findall(x->x>q,rv)                    # row numbers of surviving cells
@@ -47,23 +47,31 @@ A=hcat(A,A[:,2])        # add 3rd column --> initial y (origin)
     A[:,1]=mod.(A[:,1].+ddx,1)
     ddy=U.*cos.(2*pi*A[:,1].+theta)
     A[:,2]=mod.(A[:,2].+ddy,1)
+
+    # plot
+    scatter(A[:,1],A[:,2],zcolor=A[:,3],m=:rainbow,xlabel="x",ylabel="y",
+        mc=:green,msc=:black,ms=1.8,msw=0.0,
+        legend=false,dpi=600)
+    xlims!((0.0,1.0))
+    ylims!((0.0,1.0))
 end
 
-# Turbulence and diffusion
-scatter(A[:,1],A[:,2],zcolor=A[:,3],m=:rainbow,xlabel="x",ylabel="y",
-    mc=:green,msc=:black,ms=1.8,msw=0.0,
-    legend=false,dpi=600)
-xlims!((0.0,1.0))
-ylims!((0.0,1.0))
+gif(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff.gif", fps=30)
+#gif(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Diff.gif", fps=30)
+
+# scatter(A[:,1],A[:,2],zcolor=A[:,3],m=:rainbow,xlabel="x",ylabel="y",
+#     mc=:green,msc=:black,ms=1.8,msw=0.0,
+#     legend=false,dpi=600)
+# xlims!((0.0,1.0))
+# ylims!((0.0,1.0))
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\IBM_AdvDiff_t0")
-savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\IBM_AdvDiff_t$tmax")
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\IBM_AdvDiff_t$tmax")
 
-# #Only Diffusion:
 # scatter(A[:,1],A[:,2],xlabel="x",ylabel="y",
 #     mc=:black,msc=:black,ms=1.8,msw=0.0,
 #     legend=false,dpi=600)
 # xlims!((0.0,1.0))
 # ylims!((0.0,1.0))
 
-# savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\IBM_Diff_t$tmax")
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\IBM_Diff_t$tmax")
