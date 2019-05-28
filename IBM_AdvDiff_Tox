@@ -23,6 +23,19 @@ qC=0.25       # death probability of toxic cells
 pD=0.28       # birth probability of non-toxic cells
 qD=0.25       # death probability of non-toxic cells
 
+## Predefine local toxicity environment around one cell
+xTox=range(-4*Δ,4*Δ,step=1/L)   # local x-range
+yTox=range(-4*Δ,4*Δ,step=1/L)   # local y-range
+n=length(xTox)                  # number of patches along range
+nC=floor(Int,(n-1)/2)           # number of patches from outer margin of local env. to central toxic cell
+LocalTox=zeros(n,n)         # local toxicity environment around one toxic cell
+for i in 1:n, j in 1:n
+    LocalTox[i,j] = pdf(MvNormal([0.0; 0.0], [Δ^2 0.0; 0.0 Δ^2]),[xTox[i];yTox[j]]) # pdf of multivariate normal distribution
+end
+MaxP=pdf(MvNormal([0.0; 0.0], [Δ^2 0.0; 0.0 Δ^2]),[0;0]) # probability density at mean x and mean y
+LocalTox=LocalTox./MaxP         # rescale the values --> between 0 and 1
+surface(xTox,yTox,LocalTox, size=[800,480],camera=(50,50),xlabel="x",ylabel="y")
+
 ## Initialization
 global AC = rand(0:L,(floor(Int,c0*N0),2))  # Toxic cells --> random x- and y-positions between 0 and L
 global AD = rand(0:L,(floor(Int,(1-c0)*N0),2))  # Non-toxic cells --> random x- and y-positions between 0 and L
@@ -94,9 +107,17 @@ for t in 1:tmax
 end
 
 ## Calculate toxicity environment
-Tox=zeros(L+1,L+1)                  # global toxicity environment (whole space)
-xTox=range(-3*Δ,3*Δ,step=0.0001)    # local toxicity environment around one toxic cell
-yTox=range(-3*Δ,3*Δ,step=0.0001)
+GlobalTox=zeros(L+1,L+1)                  # global toxicity environment (whole space)
+for i in 1:size(AC,1)   # loop through all toxic cells
+    xrange=AC[i,1]-nC:AC[i,1]+nC
+    yrange=AC[i,2]-nC:AC[i,2]+nC
+    GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
+end
+# xTotal=range(0,1,length=L+1)
+# yTotal=range(0,1,length=L+1)
+# surface(xTotal[4000:6000],yTotal[4000:6000],GlobalTox[4000:6000,4000:6000], xlabel="x",ylabel="y")
+
+
 
 scatter(AD[:,1].*10^-4,AD[:,2].*10^-4,xlabel="x",ylabel="y",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
