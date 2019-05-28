@@ -94,11 +94,9 @@ for t in 1:tmax
 end
 
 ## Calculate toxicity environment
-# initiate
-Tox=
-
-
-rand(MvNormal(1,0.01),1)
+Tox=zeros(L+1,L+1)                  # global toxicity environment (whole space)
+xTox=range(-3*Δ,3*Δ,step=0.0001)    # local toxicity environment around one toxic cell
+yTox=range(-3*Δ,3*Δ,step=0.0001)
 
 scatter(AD[:,1].*10^-4,AD[:,2].*10^-4,xlabel="x",ylabel="y",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,

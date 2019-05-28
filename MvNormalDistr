@@ -1,13 +1,13 @@
-using PyPlot
-#using Distributions
+#using PyPlot
+using Distributions
 using Plots
 using ColorSchemes
 
 solar = ColorSchemes.solar
 
 n = 100
-x = range(-3, 3, length=n)
-y = range(-3, 3, length=n)
+x = range(-0.01, 0.01, length=n)
+y = range(-0.01, 0.01, length=n)
 
 xgrid = repeat(x',n,1)
 ygrid = repeat(y,1,n)
@@ -15,9 +15,11 @@ z = zeros(n,n)
 
 for i in 1:n
     for j in 1:n
-        z[i,j] = pdf(MvNormal([0.0; 0.0], [1 0.5; 0.5 1.0]),[x[i];y[j]]) # multivariate normal distribution MvNormal(eye(2))
+        z[i,j] = pdf(MvNormal([0.0; 0.0], [0.001^2 0.0; 0.0 0.001^2]),[x[i];y[j]]) # multivariate normal distribution MvNormal(eye(2))
     end
 end
+
+surface( x, y, z, size=[800,480],camera=(50,50))
 
 # fig = PyPlot.figure(figsize=(10,10))
 # ax = fig[:add_subplot](1,1,1, projection = "3d")
