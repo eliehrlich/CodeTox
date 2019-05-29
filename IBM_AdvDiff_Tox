@@ -55,6 +55,9 @@ ylims!((0.0,1.0))
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
 
+FreqC_timeser=zeros(tmax+1)                             # frequency of toxic cells
+FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of toxic cells
+
 ### Simulation
 @time for t in 1:tmax
     ## demography
@@ -132,6 +135,8 @@ ylims!((0.0,1.0))
     gD=gD_max.*(1.0.-GlobalTox[IndexD]./(H.+GlobalTox[IndexD]))
     SurvGrazD=rv_gD.>gD        # row numbers of surviving cells
     AD=AD[SurvGrazD,:]
+
+    FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
 end
 
 @time scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
@@ -143,6 +148,10 @@ ylims!((0.0,1.0))
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")
+
+tt=0:tmax
+plot(tt,FreqC_timeser,legend=false,xlabel="t",ylabel="Frequency of toxic cells",ylim=(0.0,1.0)) # --> a line
+scatter!(tt,FreqC_timeser) # --> dots --> "!" = mutate plot --> add dots to previous plot
 
 # xTotal=range(0,1,length=L+1)
 # yTotal=range(0,1,length=L+1)
