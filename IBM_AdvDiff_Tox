@@ -13,14 +13,14 @@ using Random
 
 ## Parameters
 L=10^4      # Number of discrete 'positions' per dimension (resolution 0.0001)
-tmax=100    # simulation steps
+tmax=30    # simulation steps
 N0=4000     # initial number of cells
 c0=0.1       # initial frequency of toxic cells
 Δ=0.001      # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
 U=0.1        # amplitude of turbulence movement wave
-pC=0.26       # birth probability of toxic cells
+pC=0.33       # birth probability of toxic cells
 qC=0.25       # death probability of toxic cells
-pD=0.28       # birth probability of non-toxic cells
+pD=0.35       # birth probability of non-toxic cells
 qD=0.25       # death probability of non-toxic cells
 gC_max=0.1    # maximum grazing loss probability
 gD_max=0.1    # maximum grazing loss probability
@@ -56,7 +56,7 @@ ylims!((0.0,1.0))
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
 
 ### Simulation
-for t in 1:tmax
+@time for t in 1:tmax
     ## demography
     # toxic cells
     rv=rand(size(AC,1))                              # random variable for demography
@@ -107,9 +107,34 @@ for t in 1:tmax
     # ddyD=U.*cos.(2*pi*AD[:,1].+theta)
     # ddyD=floor.(Int,ddyD.*L)                # discretizing
     # AD[:,2]=mod.(AD[:,2].+ddyD,L)
+
+    ## Grazing
+    # Calculate toxicity environment
+    GlobalTox=zeros(L+1,L+1)                  # global toxicity environment (whole space)
+    for i in 1:size(AC,1)   # loop through all toxic cells
+        xrange=AC[i,1]+1-nC:AC[i,1]+1+nC    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+        xrange=mod.(xrange.-1,L+1).+1       # for torus
+        yrange=AC[i,2]+1-nC:AC[i,2]+1+nC
+        yrange=mod.(yrange.-1,L+1).+1
+        GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
+    end
+
+    # Gazing loss of toxic cells
+    rv_gC=rand(size(AC,1))
+    IndexC=(AC[:,2].-1 .+1).*(L+1).+AC[:,1]     # one dimensional index
+    gC=gC_max.*(1.0.-GlobalTox[IndexC]./(H.+GlobalTox[IndexC]))
+    SurvGrazC=rv_gC.>gC        # row numbers of surviving cells
+    AC=AC[SurvGrazC,:]
+
+    # Gazing loss of non-toxic cells
+    rv_gD=rand(size(AD,1))
+    IndexD=(AD[:,2].-1 .+1).*(L+1).+AD[:,1]     # one dimensional index
+    gD=gD_max.*(1.0.-GlobalTox[IndexD]./(H.+GlobalTox[IndexD]))
+    SurvGrazD=rv_gD.>gD        # row numbers of surviving cells
+    AD=AD[SurvGrazD,:]
 end
 
-scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
+@time scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
     legend=false,dpi=600,reuse=false)
 scatter!(AC[:,1].*1/L,AC[:,2].*1/L,mc=:red,msc=:black,ms=1.8,msw=0.0)
@@ -118,36 +143,6 @@ ylims!((0.0,1.0))
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")
-
-## Calculate toxicity environment
-GlobalTox=zeros(L+1,L+1)                  # global toxicity environment (whole space)
-for i in 1:size(AC,1)   # loop through all toxic cells
-    xrange=AC[i,1]+1-nC:AC[i,1]+1+nC    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
-    xrange=mod.(xrange.-1,L+1).+1       # for torus
-    yrange=AC[i,2]+1-nC:AC[i,2]+1+nC
-    yrange=mod.(yrange.-1,L+1).+1
-    GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
-end
-
-## Grazing event
-rv_gC=rand(size(AC,1))
-IndexC=(AC[:,2].-1 .+1).*(L+1).+AC[:,1]     # one dimensional index
-gC=gC_max.*(1.0.-GlobalTox[IndexC]./(H.+GlobalTox[IndexC]))
-SurvGrazC=rv_gC.>gC        # row numbers of surviving cells
-AC=AC[SurvGrazC,:]
-
-rv_gD=rand(size(AD,1))
-IndexD=(AD[:,2].-1 .+1).*(L+1).+AD[:,1]     # one dimensional index
-gD=gD_max.*(1.0.-GlobalTox[IndexD]./(H.+GlobalTox[IndexD]))
-SurvGrazD=rv_gD.>gD        # row numbers of surviving cells
-AD=AD[SurvGrazD,:]
-
-scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
-    mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
-    legend=false,dpi=600,reuse=false)
-scatter!(AC[:,1].*1/L,AC[:,2].*1/L,mc=:red,msc=:black,ms=1.8,msw=0.0)
-xlims!((0.0,1.0))
-ylims!((0.0,1.0))
 
 # xTotal=range(0,1,length=L+1)
 # yTotal=range(0,1,length=L+1)
