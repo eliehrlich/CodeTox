@@ -12,7 +12,7 @@ using Random
 #Random.seed!(1234)
 
 ## Parameters
-tmax=1000    # simulation steps
+tmax=100    # simulation steps
 N0=20000     # initial number of cells
 Δ=0.001      # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
 U=0.1        # maximum distance of turbulence movement (-> amplitude of turbulence movement wave)
