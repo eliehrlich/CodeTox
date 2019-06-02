@@ -12,32 +12,37 @@ using Random
 #Random.seed!(1234)
 
 ## Parameters
-L=10^4      # Number of discrete 'positions' per dimension (resolution 0.0001)
-tmax=30    # simulation steps
-N0=4000     # initial number of cells
-c0=0.1       # initial frequency of toxic cells
-Δ=0.001      # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
-U=0.1        # amplitude of turbulence movement wave
-pC=0.33       # birth probability of toxic cells
+L=10^4        # Number of discrete 'positions' per dimension (resolution 0.0001)
+tmax=30       # simulation steps
+N0=20000       # initial number of cells
+c0=0.1        # initial frequency of toxic cells
+Δ=0.001       # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
+U=0.1         # amplitude of turbulence movement wave
+pC_max=0.35   # max. birth probability of toxic cells
 qC=0.25       # death probability of toxic cells
-pD=0.35       # birth probability of non-toxic cells
+pD_max=0.35   # max. birth probability of non-toxic cells
 qD=0.25       # death probability of non-toxic cells
-gC_max=0.1    # maximum grazing loss probability
-gD_max=0.1    # maximum grazing loss probability
+gC_max=0.1    # maximum grazing loss probability of toxic cells
+gD_max=0.1    # maximum grazing loss probability of non-toxic cells
 H=2           # toxicity at which grazing loss probability is halfed
+Nmax=10^6     # total resources in units of cells (maximum number of cells)
+αC=2*10^-5    # resource affinity of toxic cells (d^-1 cells^-1)
+αD=3*10^-5    # resource affinity of toxic cells (d^-1 cells^-1)
 
 ## Predefine local toxicity environment around one cell
-xTox=range(-4*Δ,4*Δ,step=1/L)   # local x-range
-yTox=range(-4*Δ,4*Δ,step=1/L)   # local y-range
+xTox=range(-3*Δ,3*Δ,step=1/L)   # local x-range
+yTox=range(-3*Δ,3*Δ,step=1/L)   # local y-range
 n=length(xTox)                  # number of patches along range
 nC=floor(Int,(n-1)/2)           # number of patches from outer margin of local env. to central toxic cell
-LocalTox=zeros(n,n)         # local toxicity environment around one toxic cell
+LocalTox=zeros(n,n)             # local toxicity environment around one toxic cell
 for i in 1:n, j in 1:n
     LocalTox[i,j] = pdf(MvNormal([0.0; 0.0], [Δ^2 0.0; 0.0 Δ^2]),[xTox[i];yTox[j]]) # pdf of multivariate normal distribution
 end
 MaxP=pdf(MvNormal([0.0; 0.0], [Δ^2 0.0; 0.0 Δ^2]),[0;0]) # probability density at mean x and mean y
 LocalTox=LocalTox./MaxP         # rescale the values --> between 0 and 1
-surface(xTox,yTox,LocalTox, size=[800,480],camera=(50,50),xlabel="x",ylabel="y")
+surface(xTox,yTox,LocalTox, size=[800,480],camera=(50,50),xlabel="x",ylabel="y",zlabel="toxin conc.",dpi=600)
+
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\LocalToxEnv")
 
 ## Initialization
 global AC = rand(0:L,(floor(Int,c0*N0),2))  # Toxic cells --> random x- and y-positions between 0 and L
@@ -60,19 +65,38 @@ FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of t
 
 ### Simulation
 @time for t in 1:tmax
-    ## demography
+    ## birth, death and grazing loss
+    # Calculate competition environment
+    R=Nmax-size(AC,1)-size(AD,1)   # resources
+    pC=pC_max*R/(pC_max/αC+R)      # resource-dependent birth probability of toxic cells
+    pD=pD_max*R/(pD_max/αD+R)      # resource-dependent birth probability of non-toxic cells
+
+    # Calculate toxicity environment
+    GlobalTox=zeros(L+1,L+1)                # global toxicity environment (whole space)
+    for i in 1:size(AC,1)                   # loop through all toxic cells
+        xrange=AC[i,1]+1-nC:AC[i,1]+1+nC    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+        xrange=mod.(xrange.-1,L+1).+1       # for torus
+        yrange=AC[i,2]+1-nC:AC[i,2]+1+nC
+        yrange=mod.(yrange.-1,L+1).+1
+        GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
+    end
+    IndexC=AC[:,2].*(L+1).+AC[:,1]     # one dimensional index - position of toxic cells
+    IndexD=AD[:,2].*(L+1).+AD[:,1]     # one dimensional index - position of non-toxic cells
+    gC=gC_max.*(1.0.-GlobalTox[IndexC]./(H.+GlobalTox[IndexC]))     # ingestion probability of toxic cell
+    gD=gD_max.*(1.0.-GlobalTox[IndexD]./(H.+GlobalTox[IndexD]))     # ingestion probability of non-toxic cell
+
     # toxic cells
-    rv=rand(size(AC,1))                              # random variable for demography
-    CellsSurv=findall(x->x>qC,rv)                    # row numbers of surviving cells
+    rv=rand(size(AC,1))
+    CellsSurv=rv.>(qC.+gC)                            # rows of surviving cells (marked with 'true')
     global AC1=AC[CellsSurv,:]                       # remove dead cells
     CellsReprod=findall(x->x>(1-pC),rv[CellsSurv])   # row number of reproducing cells
-    global AC1=vcat(AC1,AC1[CellsReprod,:])
-    # non-toxic cells                      # add offsprings --> same position as parents
-    rv=rand(size(AD,1))                              # random variable for demography
-    CellsSurv=findall(x->x>qD,rv)                    # row numbers of surviving cells
+    global AC1=vcat(AC1,AC1[CellsReprod,:])          # add offsprings --> same position as parents
+    # non-toxic cells
+    rv=rand(size(AD,1))
+    CellsSurv=rv.>(qD.+gD)                            # rows of surviving cells (marked with 'true')
     global AD1=AD[CellsSurv,:]                       # remove dead cells
     CellsReprod=findall(x->x>(1-pD),rv[CellsSurv])   # row number of reproducing cells
-    global AD1=vcat(AD1,AD1[CellsReprod,:])
+    global AD1=vcat(AD1,AD1[CellsReprod,:])          # add offsprings --> same position as parents
 
     global AC = copy(AC1)   # update matrices
     global AD = copy(AD1)   # update matrices
@@ -111,31 +135,6 @@ FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of t
     # ddyD=floor.(Int,ddyD.*L)                # discretizing
     # AD[:,2]=mod.(AD[:,2].+ddyD,L)
 
-    ## Grazing
-    # Calculate toxicity environment
-    GlobalTox=zeros(L+1,L+1)                  # global toxicity environment (whole space)
-    for i in 1:size(AC,1)   # loop through all toxic cells
-        xrange=AC[i,1]+1-nC:AC[i,1]+1+nC    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
-        xrange=mod.(xrange.-1,L+1).+1       # for torus
-        yrange=AC[i,2]+1-nC:AC[i,2]+1+nC
-        yrange=mod.(yrange.-1,L+1).+1
-        GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
-    end
-
-    # Gazing loss of toxic cells
-    rv_gC=rand(size(AC,1))
-    IndexC=(AC[:,2].-1 .+1).*(L+1).+AC[:,1]     # one dimensional index
-    gC=gC_max.*(1.0.-GlobalTox[IndexC]./(H.+GlobalTox[IndexC]))
-    SurvGrazC=rv_gC.>gC        # row numbers of surviving cells
-    AC=AC[SurvGrazC,:]
-
-    # Gazing loss of non-toxic cells
-    rv_gD=rand(size(AD,1))
-    IndexD=(AD[:,2].-1 .+1).*(L+1).+AD[:,1]     # one dimensional index
-    gD=gD_max.*(1.0.-GlobalTox[IndexD]./(H.+GlobalTox[IndexD]))
-    SurvGrazD=rv_gD.>gD        # row numbers of surviving cells
-    AD=AD[SurvGrazD,:]
-
     FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
 end
 
@@ -150,7 +149,7 @@ ylims!((0.0,1.0))
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")
 
 tt=0:tmax
-plot(tt,FreqC_timeser,legend=false,xlabel="t",ylabel="Frequency of toxic cells",ylim=(0.0,1.0)) # --> a line
+plot(tt,FreqC_timeser,reuse=false,legend=false,xlabel="t",ylabel="Frequency of toxic cells",ylim=(0.0,1.0)) # --> a line
 scatter!(tt,FreqC_timeser) # --> dots --> "!" = mutate plot --> add dots to previous plot
 
 # xTotal=range(0,1,length=L+1)
