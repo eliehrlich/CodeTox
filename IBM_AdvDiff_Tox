@@ -14,33 +14,34 @@ using Random
 ## Parameters
 L=10^4        # Number of discrete 'positions' per dimension (resolution 0.0001)
 tmax=30       # simulation steps
-N0=20000       # initial number of cells
+N0=10^4       # initial number of cells
 c0=0.1        # initial frequency of toxic cells
 Δ=0.001       # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
 U=0.1         # amplitude of turbulence movement wave
-pC_max=0.35   # max. birth probability of toxic cells
-qC=0.25       # death probability of toxic cells
-pD_max=0.35   # max. birth probability of non-toxic cells
-qD=0.25       # death probability of non-toxic cells
-gC_max=0.1    # maximum grazing loss probability of toxic cells
-gD_max=0.1    # maximum grazing loss probability of non-toxic cells
+pC_max=0.25   # max. birth probability of toxic cells
+qC=0.2       # death probability of toxic cells
+pD_max=0.4   # max. birth probability of non-toxic cells
+qD=0.2       # death probability of non-toxic cells
+gC_max=0.2    # maximum grazing loss probability of toxic cells
+gD_max=0.2    # maximum grazing loss probability of non-toxic cells
+Δ_T=0.001     # standard dev. of multivariate Gaussian distributed toxin effect
 H=2           # toxicity at which grazing loss probability is halfed
 Nmax=10^6     # total resources in units of cells (maximum number of cells)
-αC=2*10^-5    # resource affinity of toxic cells (d^-1 cells^-1)
-αD=3*10^-5    # resource affinity of toxic cells (d^-1 cells^-1)
+HC=10^5       # half-sat. of toxic cells (d^-1 cells^-1)
+HD=10^5       # half-sat. of non-toxic cells (d^-1 cells^-1)
 
 ## Predefine local toxicity environment around one cell
-xTox=range(-3*Δ,3*Δ,step=1/L)   # local x-range
-yTox=range(-3*Δ,3*Δ,step=1/L)   # local y-range
+xTox=range(-3*Δ_T,3*Δ_T,step=1/L)   # local x-range
+yTox=range(-3*Δ_T,3*Δ_T,step=1/L)   # local y-range
 n=length(xTox)                  # number of patches along range
 nC=floor(Int,(n-1)/2)           # number of patches from outer margin of local env. to central toxic cell
 LocalTox=zeros(n,n)             # local toxicity environment around one toxic cell
 for i in 1:n, j in 1:n
-    LocalTox[i,j] = pdf(MvNormal([0.0; 0.0], [Δ^2 0.0; 0.0 Δ^2]),[xTox[i];yTox[j]]) # pdf of multivariate normal distribution
+    LocalTox[i,j] = pdf(MvNormal([0.0; 0.0], [Δ_T^2 0.0; 0.0 Δ_T^2]),[xTox[i];yTox[j]]) # pdf of multivariate normal distribution
 end
-MaxP=pdf(MvNormal([0.0; 0.0], [Δ^2 0.0; 0.0 Δ^2]),[0;0]) # probability density at mean x and mean y
+MaxP=pdf(MvNormal([0.0; 0.0], [Δ_T^2 0.0; 0.0 Δ_T^2]),[0;0]) # probability density at mean x and mean y
 LocalTox=LocalTox./MaxP         # rescale the values --> between 0 and 1
-surface(xTox,yTox,LocalTox, size=[800,480],camera=(50,50),xlabel="x",ylabel="y",zlabel="toxin conc.",dpi=600)
+# surface(xTox,yTox,LocalTox, size=[800,480],camera=(50,50),xlabel="x",ylabel="y",zlabel="toxin conc.",dpi=600)
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\LocalToxEnv")
 
@@ -51,25 +52,30 @@ global AD = rand(0:L,(floor(Int,(1-c0)*N0),2))  # Non-toxic cells --> random x- 
 global AC1=copy(AC)
 global AD1=copy(AD)
 
-scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
-    mc=:steelblue,msc=:black,ms=2,msw=0.0,
-    legend=false,dpi=600,reuse=false)
-scatter!(AC[:,1].*1/L,AC[:,2].*1/L,mc=:red,msc=:black,ms=2,msw=0.0)
-xlims!((0.0,1.0))
-ylims!((0.0,1.0))
+# scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
+#     mc=:steelblue,msc=:black,ms=2,msw=0.0,
+#     legend=false,dpi=600,reuse=false)
+# scatter!(AC[:,1].*1/L,AC[:,2].*1/L,mc=:red,msc=:black,ms=2,msw=0.0)
+# xlims!((0.0,1.0))
+# ylims!((0.0,1.0))
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
 
 FreqC_timeser=zeros(tmax+1)                             # frequency of toxic cells
 FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of toxic cells
 
+PopDens=zeros(tmax+1,2)                                 # population density of toxic and non-toxic cells
+PopDens[1,1]=size(AC,1)
+PopDens[1,2]=size(AD,1)
+
 ### Simulation
 @time for t in 1:tmax
     ## birth, death and grazing loss
     # Calculate competition environment
     R=Nmax-size(AC,1)-size(AD,1)   # resources
-    pC=pC_max*R/(pC_max/αC+R)      # resource-dependent birth probability of toxic cells
-    pD=pD_max*R/(pD_max/αD+R)      # resource-dependent birth probability of non-toxic cells
+    if(R<0); R=0; end
+    pC=pC_max*R/(HC+R)      # resource-dependent birth probability of toxic cells
+    pD=pD_max*R/(HD+R)      # resource-dependent birth probability of non-toxic cells
 
     # Calculate toxicity environment
     GlobalTox=zeros(L+1,L+1)                # global toxicity environment (whole space)
@@ -136,6 +142,8 @@ FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of t
     # AD[:,2]=mod.(AD[:,2].+ddyD,L)
 
     FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
+    PopDens[t+1,1]=size(AC,1)
+    PopDens[t+1,2]=size(AD,1)
 end
 
 @time scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
@@ -145,13 +153,23 @@ scatter!(AC[:,1].*1/L,AC[:,2].*1/L,mc=:red,msc=:black,ms=1.8,msw=0.0)
 xlims!((0.0,1.0))
 ylims!((0.0,1.0))
 
-#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
+savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_HighGraz_HighConstCosts_t30")
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")
 
 tt=0:tmax
 plot(tt,FreqC_timeser,reuse=false,legend=false,xlabel="t",ylabel="Frequency of toxic cells",ylim=(0.0,1.0)) # --> a line
 scatter!(tt,FreqC_timeser) # --> dots --> "!" = mutate plot --> add dots to previous plot
 
+savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_Freq_HighGraz_HighConstCosts")
+
+# plot(tt,PopDens,reuse=false,legend=false,xlabel="t",ylabel="Pop. dens.",ylim=(0.0,2*10^6)) # --> a line
+# scatter!(tt,PopDens,markercolor=[:steelblue,:red]) # --> dots --> "!" = mutate plot --> add dots to previous plot
+
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_Freq_HighGraz")
+
+
+
 # xTotal=range(0,1,length=L+1)
 # yTotal=range(0,1,length=L+1)
-# surface(xTotal[4000:6000],yTotal[4000:6000],GlobalTox[4000:6000,4000:6000], xlabel="x",ylabel="y")
+# surface(xTotal[6000:8000],yTotal[2000:4000],transpose(GlobalTox[6000:8000,2000:4000]),xlabel="x",ylabel="y")
+# savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\GlobalTox_t$tmax")
