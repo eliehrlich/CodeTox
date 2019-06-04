@@ -9,26 +9,33 @@ using Colors
 using Distributions
 using Random
 
+include("./IBM_FunctModule")
+using .IBM_FunctModule
+
 #Random.seed!(1234)
 
 ## Parameters
 L=10^4        # Number of discrete 'positions' per dimension (resolution 0.0001)
 tmax=30       # simulation steps
-N0=10^4       # initial number of cells
+N0=4*10^4       # initial number of cells
 c0=0.1        # initial frequency of toxic cells
 Δ=0.001       # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
 U=0.1         # amplitude of turbulence movement wave
-pC_max=0.25   # max. birth probability of toxic cells
+pC_max=0.4   # max. birth probability of toxic cells
 qC=0.2       # death probability of toxic cells
-pD_max=0.4   # max. birth probability of non-toxic cells
+pD_max=0.5   # max. birth probability of non-toxic cells
 qD=0.2       # death probability of non-toxic cells
 gC_max=0.2    # maximum grazing loss probability of toxic cells
 gD_max=0.2    # maximum grazing loss probability of non-toxic cells
 Δ_T=0.001     # standard dev. of multivariate Gaussian distributed toxin effect
 H=2           # toxicity at which grazing loss probability is halfed
 Nmax=10^6     # total resources in units of cells (maximum number of cells)
-HC=10^5       # half-sat. of toxic cells (d^-1 cells^-1)
-HD=10^5       # half-sat. of non-toxic cells (d^-1 cells^-1)
+HC=2.4*10^5       # half-sat. of toxic cells (d^-1 cells^-1)
+HD=2.4*10^5       # half-sat. of non-toxic cells (d^-1 cells^-1)
+
+# Steady of non-toxic cell monoculture
+R=(qD+gD_max)/pD_max*HD/(1-(qD+gD_max)/pD_max)
+D=Nmax-R
 
 ## Predefine local toxicity environment around one cell
 xTox=range(-3*Δ_T,3*Δ_T,step=1/L)   # local x-range
@@ -46,11 +53,8 @@ LocalTox=LocalTox./MaxP         # rescale the values --> between 0 and 1
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\LocalToxEnv")
 
 ## Initialization
-global AC = rand(0:L,(floor(Int,c0*N0),2))  # Toxic cells --> random x- and y-positions between 0 and L
-global AD = rand(0:L,(floor(Int,(1-c0)*N0),2))  # Non-toxic cells --> random x- and y-positions between 0 and L
-
-global AC1=copy(AC)
-global AD1=copy(AD)
+AC = rand(0:L,(floor(Int,c0*N0),2))  # Toxic cells --> random x- and y-positions between 0 and L
+AD = rand(0:L,(floor(Int,(1-c0)*N0),2))  # Non-toxic cells --> random x- and y-positions between 0 and L
 
 # scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
 #     mc=:steelblue,msc=:black,ms=2,msw=0.0,
@@ -65,85 +69,14 @@ FreqC_timeser=zeros(tmax+1)                             # frequency of toxic cel
 FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of toxic cells
 
 PopDens=zeros(tmax+1,2)                                 # population density of toxic and non-toxic cells
-PopDens[1,1]=size(AC,1)
-PopDens[1,2]=size(AD,1)
+PopDens[1,:]=[size(AC,1),size(AD,1)]
 
 ### Simulation
 @time for t in 1:tmax
-    ## birth, death and grazing loss
-    # Calculate competition environment
-    R=Nmax-size(AC,1)-size(AD,1)   # resources
-    if(R<0); R=0; end
-    pC=pC_max*R/(HC+R)      # resource-dependent birth probability of toxic cells
-    pD=pD_max*R/(HD+R)      # resource-dependent birth probability of non-toxic cells
-
-    # Calculate toxicity environment
-    GlobalTox=zeros(L+1,L+1)                # global toxicity environment (whole space)
-    for i in 1:size(AC,1)                   # loop through all toxic cells
-        xrange=AC[i,1]+1-nC:AC[i,1]+1+nC    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
-        xrange=mod.(xrange.-1,L+1).+1       # for torus
-        yrange=AC[i,2]+1-nC:AC[i,2]+1+nC
-        yrange=mod.(yrange.-1,L+1).+1
-        GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
-    end
-    IndexC=AC[:,2].*(L+1).+AC[:,1]     # one dimensional index - position of toxic cells
-    IndexD=AD[:,2].*(L+1).+AD[:,1]     # one dimensional index - position of non-toxic cells
-    gC=gC_max.*(1.0.-GlobalTox[IndexC]./(H.+GlobalTox[IndexC]))     # ingestion probability of toxic cell
-    gD=gD_max.*(1.0.-GlobalTox[IndexD]./(H.+GlobalTox[IndexD]))     # ingestion probability of non-toxic cell
-
-    # toxic cells
-    rv=rand(size(AC,1))
-    CellsSurv=rv.>(qC.+gC)                            # rows of surviving cells (marked with 'true')
-    global AC1=AC[CellsSurv,:]                       # remove dead cells
-    CellsReprod=findall(x->x>(1-pC),rv[CellsSurv])   # row number of reproducing cells
-    global AC1=vcat(AC1,AC1[CellsReprod,:])          # add offsprings --> same position as parents
-    # non-toxic cells
-    rv=rand(size(AD,1))
-    CellsSurv=rv.>(qD.+gD)                            # rows of surviving cells (marked with 'true')
-    global AD1=AD[CellsSurv,:]                       # remove dead cells
-    CellsReprod=findall(x->x>(1-pD),rv[CellsSurv])   # row number of reproducing cells
-    global AD1=vcat(AD1,AD1[CellsReprod,:])          # add offsprings --> same position as parents
-
-    global AC = copy(AC1)   # update matrices
-    global AD = copy(AD1)   # update matrices
-
-    ## diffusion
-    # toxic cells
-    dxC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-    dyC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-    dxC=floor.(Int,dxC.*L)                # discretizing
-    dyC=floor.(Int,dyC.*L)                # discretizing
-    AC[:,1]=mod.(AC[:,1].+dxC,L)          # modulo for torus
-    AC[:,2]=mod.(AC[:,2].+dyC,L)          # modulo for torus
-    # non-toxic cells
-    dxD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-    dyD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-    dxD=floor.(Int,dxD.*L)                # discretizing
-    dyD=floor.(Int,dyD.*L)                # discretizing
-    AD[:,1]=mod.(AD[:,1].+dxD,L)         # modulo for torus
-    AD[:,2]=mod.(AD[:,2].+dyD,L)         # modulo for torus
-
-    # ## turbulence
-    # phi=rand()*2*pi     # for turbulence in x-direction
-    # theta=rand()*2*pi   # for turbulence in y-direction
-    # # toxic cells
-    # ddxC=U.*cos.(2*pi*AC[:,2].+phi) # movement in x-direction
-    # ddxC=floor.(Int,ddxC.*L)                # discretizing
-    # AC[:,1]=mod.(AC[:,1].+ddxC,L)
-    # ddyC=U.*cos.(2*pi*AC[:,1].+theta)
-    # ddyC=floor.(Int,ddyC.*L)                # discretizing
-    # AC[:,2]=mod.(AC[:,2].+ddyC,L)
-    # # non-toxic cells
-    # ddxD=U.*cos.(2*pi*AD[:,2].+phi) # movement in x-direction
-    # ddxD=floor.(Int,ddxD.*L)                # discretizing
-    # AD[:,1]=mod.(AD[:,1].+ddxD,L)
-    # ddyD=U.*cos.(2*pi*AD[:,1].+theta)
-    # ddyD=floor.(Int,ddyD.*L)                # discretizing
-    # AD[:,2]=mod.(AD[:,2].+ddyD,L)
+    global AC, AD = IBM_FunctModule.AdvDiffTox(AC,AD,LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
 
     FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
-    PopDens[t+1,1]=size(AC,1)
-    PopDens[t+1,2]=size(AD,1)
+    PopDens[t+1,:]=[size(AC,1),size(AD,1)]
 end
 
 @time scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
@@ -152,22 +85,18 @@ end
 scatter!(AC[:,1].*1/L,AC[:,2].*1/L,mc=:red,msc=:black,ms=1.8,msw=0.0)
 xlims!((0.0,1.0))
 ylims!((0.0,1.0))
-
-savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_HighGraz_HighConstCosts_t30")
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_t400_Feedback")
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")
 
 tt=0:tmax
 plot(tt,FreqC_timeser,reuse=false,legend=false,xlabel="t",ylabel="Frequency of toxic cells",ylim=(0.0,1.0)) # --> a line
 scatter!(tt,FreqC_timeser) # --> dots --> "!" = mutate plot --> add dots to previous plot
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_Freq_HighGraz_HighConstCosts")
 
-savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_Freq_HighGraz_HighConstCosts")
-
-# plot(tt,PopDens,reuse=false,legend=false,xlabel="t",ylabel="Pop. dens.",ylim=(0.0,2*10^6)) # --> a line
-# scatter!(tt,PopDens,markercolor=[:steelblue,:red]) # --> dots --> "!" = mutate plot --> add dots to previous plot
-
-#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_Freq_HighGraz")
-
-
+plot(tt,PopDens,reuse=false,legend=false,xlabel="t",ylabel="Pop. dens.",yaxis=:log,#ylim=(0.0,10^6),
+    linecolor=[:red :steelblue]) # --> a line
+scatter!(tt,PopDens,markercolor=[:red :steelblue]) # --> dots --> "!" = mutate plot --> add dots to previous plot
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_PopDens_Feedback")
 
 # xTotal=range(0,1,length=L+1)
 # yTotal=range(0,1,length=L+1)
