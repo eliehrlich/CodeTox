@@ -4,12 +4,7 @@ module IBM_FunctModule
 
     using Distributions
 
-    function AdvDiffTox(AC_init,AD_init,LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
-        AC=copy(AC_init)
-        AD=copy(AD_init)
-        AC1=copy(AC_init)
-        AD1=copy(AD_init)
-
+    function AdvDiffTox(AC,AD,LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
         ## birth, death and grazing loss
         # Calculate competition environment
         R=Nmax-size(AC,1)-size(AD,1)   # resources
@@ -21,31 +16,29 @@ module IBM_FunctModule
         GlobalTox=zeros(L+1,L+1)                # global toxicity environment (whole space)
         for i in 1:size(AC,1)                   # loop through all toxic cells
             xrange=AC[i,1]+1-nC:AC[i,1]+1+nC    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
-            xrange=mod.(xrange.-1,L+1).+1       # for torus
+            xrange=@. mod(xrange-1,L+1)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
             yrange=AC[i,2]+1-nC:AC[i,2]+1+nC
-            yrange=mod.(yrange.-1,L+1).+1
+            yrange=@. mod(yrange-1,L+1)+1
             GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
         end
-        IndexC=AC[:,2].*(L+1).+AC[:,1]     # one dimensional index - position of toxic cells
-        IndexD=AD[:,2].*(L+1).+AD[:,1]     # one dimensional index - position of non-toxic cells
-        gC=gC_max.*(1.0.-GlobalTox[IndexC]./(H.+GlobalTox[IndexC]))     # ingestion probability of toxic cell
-        gD=gD_max.*(1.0.-GlobalTox[IndexD]./(H.+GlobalTox[IndexD]))     # ingestion probability of non-toxic cell
+        IndexC=@. AC[:,2]*(L+1)+AC[:,1]     # one dimensional index - position of toxic cells
+        IndexD=@. AD[:,2]*(L+1)+AD[:,1]     # one dimensional index - position of non-toxic cells
+
+        gC=@. gC_max*(1.0-GlobalTox[IndexC]/(H+GlobalTox[IndexC]))     # ingestion probability of toxic cell
+        gD=@. gD_max*(1.0-GlobalTox[IndexD]/(H.+GlobalTox[IndexD]))     # ingestion probability of non-toxic cell
 
         # toxic cells
         rv=rand(size(AC,1))
         CellsSurv=rv.>(qC.+gC)                            # rows of surviving cells (marked with 'true')
-        AC1=AC[CellsSurv,:]                       # remove dead cells
+        AC=AC[CellsSurv,:]                       # remove dead cells
         CellsReprod=findall(x->x>(1-pC),rv[CellsSurv])   # row number of reproducing cells
-        AC1=vcat(AC1,AC1[CellsReprod,:])          # add offsprings --> same position as parents
+        AC=vcat(AC,AC[CellsReprod,:])          # add offsprings --> same position as parents
         # non-toxic cells
         rv=rand(size(AD,1))
         CellsSurv=rv.>(qD.+gD)                            # rows of surviving cells (marked with 'true')
-        AD1=AD[CellsSurv,:]                       # remove dead cells
+        AD=AD[CellsSurv,:]                       # remove dead cells
         CellsReprod=findall(x->x>(1-pD),rv[CellsSurv])   # row number of reproducing cells
-        AD1=vcat(AD1,AD1[CellsReprod,:])          # add offsprings --> same position as parents
-
-        AC = copy(AC1)   # update matrices
-        AD = copy(AD1)   # update matrices
+        AD=vcat(AD,AD[CellsReprod,:])          # add offsprings --> same position as parents
 
         ## diffusion
         # toxic cells

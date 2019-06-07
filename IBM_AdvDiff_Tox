@@ -15,8 +15,8 @@ using .IBM_FunctModule
 #Random.seed!(1234)
 
 ## Parameters
-L=10^4        # Number of discrete 'positions' per dimension (resolution 0.0001)
-tmax=30       # simulation steps
+L=2*10^3        # Number of discrete 'positions' per dimension (L=10^4 --> resolution 0.0001 = 1mm)
+tmax=100       # simulation steps
 N0=4*10^4       # initial number of cells
 c0=0.1        # initial frequency of toxic cells
 Δ=0.001       # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
@@ -48,7 +48,7 @@ for i in 1:n, j in 1:n
 end
 MaxP=pdf(MvNormal([0.0; 0.0], [Δ_T^2 0.0; 0.0 Δ_T^2]),[0;0]) # probability density at mean x and mean y
 LocalTox=LocalTox./MaxP         # rescale the values --> between 0 and 1
-# surface(xTox,yTox,LocalTox, size=[800,480],camera=(50,50),xlabel="x",ylabel="y",zlabel="toxin conc.",dpi=600)
+#surface(xTox,yTox,LocalTox, size=[800,480],camera=(50,50),xlabel="x",ylabel="y",zlabel="toxin conc.",dpi=600)
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\LocalToxEnv")
 
@@ -56,10 +56,10 @@ LocalTox=LocalTox./MaxP         # rescale the values --> between 0 and 1
 AC = rand(0:L,(floor(Int,c0*N0),2))  # Toxic cells --> random x- and y-positions between 0 and L
 AD = rand(0:L,(floor(Int,(1-c0)*N0),2))  # Non-toxic cells --> random x- and y-positions between 0 and L
 
-# scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
+# scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
 #     mc=:steelblue,msc=:black,ms=2,msw=0.0,
 #     legend=false,dpi=600,reuse=false)
-# scatter!(AC[:,1].*1/L,AC[:,2].*1/L,mc=:red,msc=:black,ms=2,msw=0.0)
+# scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=2,msw=0.0)
 # xlims!((0.0,1.0))
 # ylims!((0.0,1.0))
 
@@ -71,22 +71,27 @@ FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of t
 PopDens=zeros(tmax+1,2)                                 # population density of toxic and non-toxic cells
 PopDens[1,:]=[size(AC,1),size(AD,1)]
 
-### Simulation
-@time for t in 1:tmax
-    global AC, AD = IBM_FunctModule.AdvDiffTox(AC,AD,LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
+## Simulate
+function Simulate(AC, AD, FreqC_timeser, PopDens, tmax, LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
+    @time for t in 1:tmax
+        AC, AD = IBM_FunctModule.AdvDiffTox(AC,AD,LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
 
-    FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
-    PopDens[t+1,:]=[size(AC,1),size(AD,1)]
+        FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
+        PopDens[t+1,:]=[size(AC,1),size(AD,1)]
+    end
+
+    return AC, AD, FreqC_timeser, PopDens
 end
 
-@time scatter(AD[:,1].*1/L,AD[:,2].*1/L,xlabel="x",ylabel="y",
+AC, AD, FreqC_timeser, PopDens = Simulate(AC, AD, FreqC_timeser, PopDens, tmax, LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
+
+@time scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
     legend=false,dpi=600,reuse=false)
-scatter!(AC[:,1].*1/L,AC[:,2].*1/L,mc=:red,msc=:black,ms=1.8,msw=0.0)
+scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=1.8,msw=0.0)
 xlims!((0.0,1.0))
 ylims!((0.0,1.0))
-#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_t400_Feedback")
-#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")
+##savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t$tmax")
 
 tt=0:tmax
 plot(tt,FreqC_timeser,reuse=false,legend=false,xlabel="t",ylabel="Frequency of toxic cells",ylim=(0.0,1.0)) # --> a line
@@ -96,7 +101,7 @@ scatter!(tt,FreqC_timeser) # --> dots --> "!" = mutate plot --> add dots to prev
 plot(tt,PopDens,reuse=false,legend=false,xlabel="t",ylabel="Pop. dens.",yaxis=:log,#ylim=(0.0,10^6),
     linecolor=[:red :steelblue]) # --> a line
 scatter!(tt,PopDens,markercolor=[:red :steelblue]) # --> dots --> "!" = mutate plot --> add dots to previous plot
-#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_PopDens_Feedback")
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_PopDens_Feedback_LongRun")
 
 # xTotal=range(0,1,length=L+1)
 # yTotal=range(0,1,length=L+1)
