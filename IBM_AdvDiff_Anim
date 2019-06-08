@@ -26,38 +26,46 @@ global A = rand(N0,2)   # Cells --> random x- and y-positions between 0 and 1
 A=hcat(A,A[:,2])        # add 3rd column --> initial y (origin)
 
 ## Simulation
-@time anim = @animate for t in 1:tmax
-    # demography
-    rv=rand(size(A,1))                              # random variable for demography
-    CellsSurv=findall(x->x>q,rv)                    # row numbers of surviving cells
-    global A=A[CellsSurv,:]                                # remove dead cells
-    CellsReprod=findall(x->x>(1-p),rv[CellsSurv])   # row number of reproducing cells
-    global A=vcat(A,A[CellsReprod,:])                      # add offsprings --> same position as parents
+@time anim = @animate for t in 0:tmax
+    if t==0
+        scatter(A[:,1],A[:,2],zcolor=A[:,3],m=:rainbow,xlabel="x",ylabel="y",
+            mc=:green,msc=:black,ms=1.8,msw=0.0,
+            legend=false,dpi=600)
+        xlims!((0.0,1.0))
+        ylims!((0.0,1.0))
+    else
+        # demography
+        rv=rand(size(A,1))                              # random variable for demography
+        CellsSurv=findall(x->x>q,rv)                    # row numbers of surviving cells
+        global A=A[CellsSurv,:]                                # remove dead cells
+        CellsReprod=findall(x->x>(1-p),rv[CellsSurv])   # row number of reproducing cells
+        global A=vcat(A,A[CellsReprod,:])                      # add offsprings --> same position as parents
 
-    # diffusion
-    dx=rand(Normal(0,Δ),size(A,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-    dy=rand(Normal(0,Δ),size(A,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-    A[:,1]=mod.(A[:,1].+dx,1)          # modulo for torus
-    A[:,2]=mod.(A[:,2].+dy,1)          # modulo for torus
+        # diffusion
+        dx=rand(Normal(0,Δ),size(A,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dy=rand(Normal(0,Δ),size(A,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        A[:,1]=mod.(A[:,1].+dx,1)          # modulo for torus
+        A[:,2]=mod.(A[:,2].+dy,1)          # modulo for torus
 
-    # turbulence
-    phi=rand()*2*pi     # for turbulence in x-direction
-    theta=rand()*2*pi   # for turbulence in y-direction
-    ddx=U.*cos.(2*pi*A[:,2].+phi) # movement in x-direction
-    A[:,1]=mod.(A[:,1].+ddx,1)
-    ddy=U.*cos.(2*pi*A[:,1].+theta)
-    A[:,2]=mod.(A[:,2].+ddy,1)
+        # turbulence
+        phi=rand()*2*pi     # for turbulence in x-direction
+        theta=rand()*2*pi   # for turbulence in y-direction
+        ddx=U.*cos.(2*pi*A[:,2].+phi) # movement in x-direction
+        A[:,1]=mod.(A[:,1].+ddx,1)
+        ddy=U.*cos.(2*pi*A[:,1].+theta)
+        A[:,2]=mod.(A[:,2].+ddy,1)
 
-    # plot
-    scatter(A[:,1],A[:,2],zcolor=A[:,3],m=:rainbow,xlabel="x",ylabel="y",
-        mc=:green,msc=:black,ms=1.8,msw=0.0,
-        legend=false,dpi=600)
-    xlims!((0.0,1.0))
-    ylims!((0.0,1.0))
+        # plot
+        scatter(A[:,1],A[:,2],zcolor=A[:,3],m=:rainbow,xlabel="x",ylabel="y",
+            mc=:green,msc=:black,ms=1.8,msw=0.0,
+            legend=false,dpi=600)
+        xlims!((0.0,1.0))
+        ylims!((0.0,1.0))
+    end
 end
 
-gif(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff.gif", fps=30)
-#gif(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Diff.gif", fps=30)
+#gif(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff.gif", fps=30)
+mp4(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff.mp4", fps=5)
 
 # scatter(A[:,1],A[:,2],zcolor=A[:,3],m=:rainbow,xlabel="x",ylabel="y",
 #     mc=:green,msc=:black,ms=1.8,msw=0.0,

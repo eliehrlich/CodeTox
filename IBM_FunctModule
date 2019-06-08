@@ -1,8 +1,102 @@
 module IBM_FunctModule
 
-    export MultiCell, AdvDiffTox
+    export MultiCell, AdvDiffTox, AdvDiffToxLocal
 
     using Distributions
+
+    function AdvDiffToxLocal(AC,AD,LocalTox,LocalComp,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
+        ## birth, death and grazing loss
+        # Calculate toxicity environment
+        GlobalTox=zeros(L+1,L+1)                # global toxicity environment (whole space)
+        GlobalComp=zeros(L+1,L+1)               # global competition environment (whole space)
+        for i in 1:size(AC,1)                   # loop through all toxic cells
+            xrange=AC[i,1]+1-nC:AC[i,1]+1+nC    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+            xrange=@. mod(xrange-1,L+1)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
+            yrange=AC[i,2]+1-nC:AC[i,2]+1+nC
+            yrange=@. mod(yrange-1,L+1)+1
+            GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
+
+            xrange=AC[i,1]+1-nComp:AC[i,1]+1+nComp    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+            xrange=@. mod(xrange-1,L+1)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
+            yrange=AC[i,2]+1-nComp:AC[i,2]+1+nComp
+            yrange=@. mod(yrange-1,L+1)+1
+            GlobalComp[xrange,yrange]=GlobalComp[xrange,yrange].+LocalComp # add competition effect of the considered cell
+        end
+
+        print("1., ")
+
+        for i in 1:size(AD,1)                   # loop through all non-toxic cells
+            xrange=AD[i,1]+1-nComp:AD[i,1]+1+nComp    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+            xrange=@. mod(xrange-1,L+1)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
+            yrange=AD[i,2]+1-nComp:AD[i,2]+1+nComp
+            yrange=@. mod(yrange-1,L+1)+1
+            GlobalComp[xrange,yrange]=GlobalComp[xrange,yrange].+LocalComp # add competition effect of the considered cell
+        end
+
+        print("2., ")
+
+        IndexC=@. AC[:,2]*(L+1)+AC[:,1]     # one dimensional index - position of toxic cells
+        IndexD=@. AD[:,2]*(L+1)+AD[:,1]     # one dimensional index - position of non-toxic cells
+
+        gC=@. gC_max*(1.0-GlobalTox[IndexC]/(H+GlobalTox[IndexC]))     # ingestion probability of toxic cell
+        gD=@. gD_max*(1.0-GlobalTox[IndexD]/(H+GlobalTox[IndexD]))     # ingestion probability of non-toxic cell
+
+        print("3.a, ")
+
+        pC=@. pC_max*(1.0-GlobalComp[IndexC]/(HC+GlobalComp[IndexC]))      # resource-dependent birth probability of toxic cells
+        pD=@. pD_max*(1.0-GlobalComp[IndexD]/(HD+GlobalComp[IndexD]))      # resource-dependent birth probability of non-toxic cells
+
+        println("3.b")
+
+        # toxic cells
+        rv=rand(size(AC,1))
+        CellsSurv=rv.>(qC.+gC)                            # rows of surviving cells (marked with 'true')
+        AC=AC[CellsSurv,:]                       # remove dead cells
+        CellsReprod=rv[CellsSurv].>(1 .-pC[CellsSurv])   # row number of reproducing cells
+        AC=vcat(AC,AC[CellsReprod,:])          # add offsprings --> same position as parents
+        # non-toxic cells
+        rv=rand(size(AD,1))
+        CellsSurv=rv.>(qD.+gD)                            # rows of surviving cells (marked with 'true')
+        AD=AD[CellsSurv,:]                       # remove dead cells
+        CellsReprod=rv[CellsSurv].>(1 .-pD[CellsSurv])   # row number of reproducing cells
+        AD=vcat(AD,AD[CellsReprod,:])          # add offsprings --> same position as parents
+
+        ## diffusion
+        # toxic cells
+        dxC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dyC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dxC=floor.(Int,dxC.*L)                # discretizing
+        dyC=floor.(Int,dyC.*L)                # discretizing
+        AC[:,1]=mod.(AC[:,1].+dxC,L)          # modulo for torus
+        AC[:,2]=mod.(AC[:,2].+dyC,L)          # modulo for torus
+        # non-toxic cells
+        dxD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dyD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dxD=floor.(Int,dxD.*L)                # discretizing
+        dyD=floor.(Int,dyD.*L)                # discretizing
+        AD[:,1]=mod.(AD[:,1].+dxD,L)         # modulo for torus
+        AD[:,2]=mod.(AD[:,2].+dyD,L)         # modulo for torus
+
+        # ## turbulence
+        # phi=rand()*2*pi     # for turbulence in x-direction
+        # theta=rand()*2*pi   # for turbulence in y-direction
+        # # toxic cells
+        # ddxC=U.*cos.(2*pi*AC[:,2].+phi) # movement in x-direction
+        # ddxC=floor.(Int,ddxC.*L)                # discretizing
+        # AC[:,1]=mod.(AC[:,1].+ddxC,L)
+        # ddyC=U.*cos.(2*pi*AC[:,1].+theta)
+        # ddyC=floor.(Int,ddyC.*L)                # discretizing
+        # AC[:,2]=mod.(AC[:,2].+ddyC,L)
+        # # non-toxic cells
+        # ddxD=U.*cos.(2*pi*AD[:,2].+phi) # movement in x-direction
+        # ddxD=floor.(Int,ddxD.*L)                # discretizing
+        # AD[:,1]=mod.(AD[:,1].+ddxD,L)
+        # ddyD=U.*cos.(2*pi*AD[:,1].+theta)
+        # ddyD=floor.(Int,ddyD.*L)                # discretizing
+        # AD[:,2]=mod.(AD[:,2].+ddyD,L)
+
+        return AC, AD
+    end
 
     function AdvDiffTox(AC,AD,LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
         ## birth, death and grazing loss
