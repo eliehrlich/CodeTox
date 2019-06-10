@@ -64,8 +64,8 @@ A=hcat(A,A[:,2])        # add 3rd column --> initial y (origin)
     end
 end
 
-#gif(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff.gif", fps=30)
-mp4(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff.mp4", fps=5)
+gif(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff.gif", fps=30)
+#mp4(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff.mp4", fps=5)
 
 # scatter(A[:,1],A[:,2],zcolor=A[:,3],m=:rainbow,xlabel="x",ylabel="y",
 #     mc=:green,msc=:black,ms=1.8,msw=0.0,

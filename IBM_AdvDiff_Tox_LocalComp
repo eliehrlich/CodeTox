@@ -16,7 +16,7 @@ using .IBM_FunctModule
 
 ## Parameters
 L=2*10^3        # Number of discrete 'positions' per dimension (L=10^4 --> resolution 0.0001 = 1mm)
-tmax=30       # simulation steps
+tmax=400       # simulation steps
 N0=4*10^4       # initial number of cells
 c0=0.1        # initial frequency of toxic cells
 Δ=0.001       # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
@@ -84,26 +84,19 @@ FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of t
 PopDens=zeros(tmax+1,2)                                 # population density of toxic and non-toxic cells
 PopDens[1,:]=[size(AC,1),size(AD,1)]
 
-@time for t in 1:tmax
-    global AC, AD = IBM_FunctModule.AdvDiffToxLocal(AC,AD,LocalTox,LocalComp,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
+## Simulate
+function Simulate(AC, AD, FreqC_timeser, PopDens, tmax, LocalTox, LocalComp, L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
+    @time for t in 1:tmax
+        AC, AD = IBM_FunctModule.AdvDiffToxLocal(AC,AD,LocalTox,LocalComp,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
 
-    FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
-    PopDens[t+1,:]=[size(AC,1),size(AD,1)]
+        FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
+        PopDens[t+1,:]=[size(AC,1),size(AD,1)]
+    end
+
+    return AC, AD, FreqC_timeser, PopDens
 end
 
-## Simulate
-# function Simulate(AC, AD, FreqC_timeser, PopDens, tmax, LocalTox, LocalComp, L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
-#     @time for t in 1:tmax
-#         AC, AD = IBM_FunctModule.AdvDiffToxLocal(AC,AD,LocalTox,LocalComp,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
-#
-#         FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
-#         PopDens[t+1,:]=[size(AC,1),size(AD,1)]
-#     end
-#
-#     return AC, AD, FreqC_timeser, PopDens
-# end
-#
-# AC, AD, FreqC_timeser, PopDens = Simulate(AC, AD, FreqC_timeser, PopDens, tmax, LocalTox, LocalComp, L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
+AC, AD, FreqC_timeser, PopDens = Simulate(AC, AD, FreqC_timeser, PopDens, tmax, LocalTox, LocalComp, L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
 
 @time scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,

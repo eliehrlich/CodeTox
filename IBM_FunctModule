@@ -23,8 +23,6 @@ module IBM_FunctModule
             GlobalComp[xrange,yrange]=GlobalComp[xrange,yrange].+LocalComp # add competition effect of the considered cell
         end
 
-        print("1., ")
-
         for i in 1:size(AD,1)                   # loop through all non-toxic cells
             xrange=AD[i,1]+1-nComp:AD[i,1]+1+nComp    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
             xrange=@. mod(xrange-1,L+1)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
@@ -33,20 +31,14 @@ module IBM_FunctModule
             GlobalComp[xrange,yrange]=GlobalComp[xrange,yrange].+LocalComp # add competition effect of the considered cell
         end
 
-        print("2., ")
-
-        IndexC=@. AC[:,2]*(L+1)+AC[:,1]     # one dimensional index - position of toxic cells
-        IndexD=@. AD[:,2]*(L+1)+AD[:,1]     # one dimensional index - position of non-toxic cells
+        IndexC=@. AC[:,2]*(L+1)+AC[:,1]+1     # one dimensional index - position of toxic cells
+        IndexD=@. AD[:,2]*(L+1)+AD[:,1]+1     # one dimensional index - position of non-toxic cells
 
         gC=@. gC_max*(1.0-GlobalTox[IndexC]/(H+GlobalTox[IndexC]))     # ingestion probability of toxic cell
         gD=@. gD_max*(1.0-GlobalTox[IndexD]/(H+GlobalTox[IndexD]))     # ingestion probability of non-toxic cell
 
-        print("3.a, ")
-
         pC=@. pC_max*(1.0-GlobalComp[IndexC]/(HC+GlobalComp[IndexC]))      # resource-dependent birth probability of toxic cells
         pD=@. pD_max*(1.0-GlobalComp[IndexD]/(HD+GlobalComp[IndexD]))      # resource-dependent birth probability of non-toxic cells
-
-        println("3.b")
 
         # toxic cells
         rv=rand(size(AC,1))
@@ -115,8 +107,8 @@ module IBM_FunctModule
             yrange=@. mod(yrange-1,L+1)+1
             GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
         end
-        IndexC=@. AC[:,2]*(L+1)+AC[:,1]     # one dimensional index - position of toxic cells
-        IndexD=@. AD[:,2]*(L+1)+AD[:,1]     # one dimensional index - position of non-toxic cells
+        IndexC=@. AC[:,2]*(L+1)+AC[:,1]+1     # one dimensional index - position of toxic cells
+        IndexD=@. AD[:,2]*(L+1)+AD[:,1]+1     # one dimensional index - position of non-toxic cells
 
         gC=@. gC_max*(1.0-GlobalTox[IndexC]/(H+GlobalTox[IndexC]))     # ingestion probability of toxic cell
         gD=@. gD_max*(1.0-GlobalTox[IndexD]/(H.+GlobalTox[IndexD]))     # ingestion probability of non-toxic cell
