@@ -1,0 +1,106 @@
+################################################################
+# IBM for evolution of cells producing toxins as a public good #
+#               Author: Elias Ehrlich                          #
+#                 Date: 26/05/2019                             #
+################################################################
+## Packages
+using Plots
+using Colors
+using Distributions
+using Random
+
+include("./IBM_FunctModule")
+using .IBM_FunctModule
+
+#Random.seed!(1234)
+
+## Parameters
+L=2*10^3        # Number of discrete 'positions' per dimension (L=10^4 --> resolution 0.0001 = 1mm)
+tmax=5      # simulation steps
+N0=4*10^4       # initial number of cells
+c0=0.1        # initial frequency of toxic cells
+Δ=0.001       # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
+U=0.1         # amplitude of turbulence movement wave
+pC_max=0.4   # max. birth probability of toxic cells
+qC=0.2       # death probability of toxic cells
+pD_max=0.5   # max. birth probability of non-toxic cells
+qD=0.2       # death probability of non-toxic cells
+gC_max=0.2    # maximum grazing loss probability of toxic cells
+gD_max=0.2    # maximum grazing loss probability of non-toxic cells
+Δ_T=0.001     # standard dev. of multivariate Gaussian distributed toxin effect
+H=2           # toxicity at which grazing loss probability is halfed
+Nmax=10^6     # total resources in units of cells (maximum number of cells)
+HC=2.4*10^5       # half-sat. of toxic cells (d^-1 cells^-1)
+HD=2.4*10^5       # half-sat. of non-toxic cells (d^-1 cells^-1)
+
+# Steady of non-toxic cell monoculture
+R=(qD+gD_max)/pD_max*HD/(1-(qD+gD_max)/pD_max)
+D=Nmax-R
+
+## Predefine local toxicity environment around one cell
+xTox=range(-3*Δ_T,3*Δ_T,step=1/L)   # local x-range
+yTox=range(-3*Δ_T,3*Δ_T,step=1/L)   # local y-range
+n=length(xTox)                  # number of patches along range
+nC=floor(Int,(n-1)/2)           # number of patches from outer margin of local env. to central toxic cell
+LocalTox=zeros(n,n)             # local toxicity environment around one toxic cell
+for i in 1:n, j in 1:n
+    LocalTox[i,j] = pdf(MvNormal([0.0; 0.0], [Δ_T^2 0.0; 0.0 Δ_T^2]),[xTox[i];yTox[j]]) # pdf of multivariate normal distribution
+end
+MaxP=pdf(MvNormal([0.0; 0.0], [Δ_T^2 0.0; 0.0 Δ_T^2]),[0;0]) # probability density at mean x and mean y
+LocalTox=LocalTox./MaxP         # rescale the values --> between 0 and 1
+
+## Initialization
+AC = rand(0:L,(floor(Int,c0*N0),2))  # Toxic cells --> random x- and y-positions between 0 and L
+AD = rand(0:L,(floor(Int,(1-c0)*N0),2))  # Non-toxic cells --> random x- and y-positions between 0 and L
+
+FreqC_timeser=zeros(tmax+1)                             # frequency of toxic cells
+FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of toxic cells
+
+PopDens=zeros(tmax+1,2)                                 # population density of toxic and non-toxic cells
+PopDens[1,:]=[size(AC,1),size(AD,1)]
+
+## Simulate
+@time anim = @animate for t in 0:tmax
+    if t==0
+        p1=scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
+            mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
+            legend=false,dpi=600,reuse=false,
+            xlims=(0.0,1.0),ylims=(0.0,1.0))
+        scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=1.8,msw=0.0)
+
+
+        p2=scatter(0:t,FreqC_timeser[1:(t+1)],reuse=false,legend=false,
+            xlabel="t",ylabel="Freq. of toxic cells",xlims=(0,tmax),ylims=(0.0,1.0))
+
+        p3=scatter(0:t,PopDens[1:(t+1)],reuse=false,legend=false,xlabel="t",ylabel="Pop. dens.",
+            xlims=(0,tmax),ylim=(10^2,10^5),yaxis=:log,
+            linecolor=[:red :steelblue])
+
+            plot(p1,p2,p3, layout=@layout [a{0.8w} grid(2,1)])#grid(3,1,heights=[0.6,0.2,0.2]))
+            #plot(p1,p2,p3, layout=@layout [a{0.8h} ; b c])#grid(3,1,heights=[0.6,0.2,0.2]))
+    else
+
+        global AC, AD = IBM_FunctModule.AdvDiffTox(AC,AD,LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
+        global FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
+        global PopDens[t+1,:]=[size(AC,1),size(AD,1)]
+
+        p1=scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
+            mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
+            legend=false,dpi=600,reuse=false,
+            xlims=(0.0,1.0),ylims=(0.0,1.0))
+        scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=1.8,msw=0.0)
+
+        p2=scatter(0:t,FreqC_timeser[1:(t+1)],reuse=false,legend=false,
+            xlabel="t",ylabel="Freq. of toxic cells",xlims=(0,tmax),ylims=(0.0,1.0))
+
+        p3=scatter(0:t,PopDens[1:(t+1)],reuse=false,legend=false,xlabel="t",ylabel="Pop. dens.",
+            xlims=(0,tmax),ylim=(10^2,10^5),yaxis=:log,
+            linecolor=[:red :steelblue])
+
+            plot(p1,p2,p3, layout=@layout [a{0.8w} grid(2,1)])#grid(3,1,heights=[0.6,0.2,0.2]))
+            #plot(p1,p2,p3, layout=@layout [a{0.8h} ; b c])#grid(3,1,heights=[0.6,0.2,0.2]))
+    end
+end
+
+#gif(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff_Tox.gif", fps=30)
+mp4(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff_Tox.mp4", fps=5)
