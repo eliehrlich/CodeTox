@@ -5,6 +5,7 @@
 ################################################################
 ## Packages
 using Plots
+using Plots.PlotMeasures
 using Colors
 using Distributions
 using Random
@@ -16,7 +17,7 @@ using .IBM_FunctModule
 
 ## Parameters
 L=2*10^3        # Number of discrete 'positions' per dimension (L=10^4 --> resolution 0.0001 = 1mm)
-tmax=5      # simulation steps
+tmax=100      # simulation steps
 N0=4*10^4       # initial number of cells
 c0=0.1        # initial frequency of toxic cells
 Δ=0.001       # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
@@ -64,20 +65,23 @@ PopDens[1,:]=[size(AC,1),size(AD,1)]
     if t==0
         p1=scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
             mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
-            legend=false,dpi=600,reuse=false,
+            legend=false,reuse=false, #dpi=600,
             xlims=(0.0,1.0),ylims=(0.0,1.0))
         scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=1.8,msw=0.0)
 
 
-        p2=scatter(0:t,FreqC_timeser[1:(t+1)],reuse=false,legend=false,
-            xlabel="t",ylabel="Freq. of toxic cells",xlims=(0,tmax),ylims=(0.0,1.0))
+        p2=plot(0:t,FreqC_timeser[1:(t+1)],reuse=false,legend=false,
+            xlabel="t",ylabel="Freq. of toxic cells",xlims=(0,tmax),ylims=(0.0,1.0),
+            linecolor=:black,linewidth=2)
 
-        p3=scatter(0:t,PopDens[1:(t+1)],reuse=false,legend=false,xlabel="t",ylabel="Pop. dens.",
-            xlims=(0,tmax),ylim=(10^2,10^5),yaxis=:log,
-            linecolor=[:red :steelblue])
+        p3=plot(0:t,PopDens[1:(t+1),:],reuse=false,legend=false,xlabel="t",ylabel="Abundance",
+            xlims=(0,tmax),ylim=(10^3,10^6),yaxis=:log,
+            linecolor=[:red :steelblue],linewidth=2)
 
-            plot(p1,p2,p3, layout=@layout [a{0.8w} grid(2,1)])#grid(3,1,heights=[0.6,0.2,0.2]))
-            #plot(p1,p2,p3, layout=@layout [a{0.8h} ; b c])#grid(3,1,heights=[0.6,0.2,0.2]))
+        #plot(p1,p2,p3, layout=@layout [a{0.8w} grid(2,1)])#grid(3,1,heights=[0.6,0.2,0.2]))
+        plot(p1,p2,p3, layout=@layout [a{0.75h} ; b c])#, size=(600,400))#grid(3,1,heights=[0.6,0.2,0.2]))
+        plot!(size=(600,600))#,left_margin=10mm,bottom_margin=[10mm 1mm])
+        plot!(title=["a" "b" "c"],title_location=:left)
     else
 
         global AC, AD = IBM_FunctModule.AdvDiffTox(AC,AD,LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
@@ -86,21 +90,47 @@ PopDens[1,:]=[size(AC,1),size(AD,1)]
 
         p1=scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
             mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
-            legend=false,dpi=600,reuse=false,
+            legend=false,reuse=false, #dpi=600,
             xlims=(0.0,1.0),ylims=(0.0,1.0))
         scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=1.8,msw=0.0)
 
-        p2=scatter(0:t,FreqC_timeser[1:(t+1)],reuse=false,legend=false,
-            xlabel="t",ylabel="Freq. of toxic cells",xlims=(0,tmax),ylims=(0.0,1.0))
+        p2=plot(0:t,FreqC_timeser[1:(t+1)],reuse=false,legend=false,
+            xlabel="t",ylabel="Freq. of toxic cells",xlims=(0,tmax),ylims=(0.0,1.0),
+            linecolor=:black,linewidth=2)
 
-        p3=scatter(0:t,PopDens[1:(t+1)],reuse=false,legend=false,xlabel="t",ylabel="Pop. dens.",
-            xlims=(0,tmax),ylim=(10^2,10^5),yaxis=:log,
-            linecolor=[:red :steelblue])
+        p3=plot(0:t,PopDens[1:(t+1),:],reuse=false,legend=false,xlabel="t",ylabel="Abundance",
+            xlims=(0,tmax),ylim=(10^3,10^6),yaxis=:log,
+            linecolor=[:red :steelblue],linewidth=2)
 
-            plot(p1,p2,p3, layout=@layout [a{0.8w} grid(2,1)])#grid(3,1,heights=[0.6,0.2,0.2]))
-            #plot(p1,p2,p3, layout=@layout [a{0.8h} ; b c])#grid(3,1,heights=[0.6,0.2,0.2]))
+        #plot(p1,p2,p3, layout=@layout [a{0.8w} grid(2,1)])#grid(3,1,heights=[0.6,0.2,0.2]))
+        plot(p1,p2,p3, layout=@layout [a{0.75h} ; b c])#, size=(600,400))#grid(3,1,heights=[0.6,0.2,0.2]))
+        plot!(size=(600,600))#,left_margin=10mm,bottom_margin=[10mm 1mm])
+        plot!(title=["a" "b" "c"],title_location=:left)
     end
 end
 
 #gif(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff_Tox.gif", fps=30)
 mp4(anim, "D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff_Tox.mp4", fps=5)
+
+# t=tmax
+#
+# p1=scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
+#     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
+#     legend=false,reuse=false, #dpi=600,
+#     xlims=(0.0,1.0),ylims=(0.0,1.0))
+# scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=1.8,msw=0.0)
+#
+# p2=plot(0:t,FreqC_timeser[1:(t+1)],reuse=false,legend=false,
+#     xlabel="t",ylabel="Freq. of toxic cells",xlims=(0,tmax),ylims=(0.0,1.0),
+#     linecolor=:black,linewidth=2)
+#
+# p3=plot(0:t,PopDens[1:(t+1),:],reuse=false,legend=false,xlabel="t",ylabel="Abundance",
+#     xlims=(0,tmax),ylim=(10^3,10^6),yaxis=:log,
+#     linecolor=[:red :steelblue],linewidth=2)
+#
+# #plot(p1,p2,p3, layout=@layout [a{0.8w} grid(2,1)])#grid(3,1,heights=[0.6,0.2,0.2]))
+# plot(p1,p2,p3, layout=@layout [a{0.75h} ; b c])#, size=(600,400))#grid(3,1,heights=[0.6,0.2,0.2]))
+# plot!(size=(600,600))#,left_margin=10mm,bottom_margin=[10mm 1mm])
+# plot!(title=["a" "b" "c"],title_location=:left)
+#
+# savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff_Tox_100d_NoC")
