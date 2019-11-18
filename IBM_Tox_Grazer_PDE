@@ -1,0 +1,83 @@
+################################################################
+# IBM for evolution of cells producing toxins as a public good #
+#               Author: Elias Ehrlich                          #
+#                 Date: 18/11/2019                             #
+################################################################
+# Packages
+using Plots
+using Colors
+using Distributions
+using Random
+using DSP
+using ImageFiltering
+
+# Parameters
+## Number of grid cells on each axis, number of cells, number of time steps
+Ngrid=100
+Ncell=100
+Nt=100
+
+## Carrying capacity of nutrients
+K=64
+
+## Replenishing rate of nutrients
+λ=1
+
+## Diffusivity of nutrients and cells
+Dn=1
+Dc=1
+
+## Time steps, grid cell size
+dt=0.1
+dx=1
+
+## Diffusion kernel (1 dimension). Warning! Dn/dx/dx*dt must be <1/3
+α=Dn/dx/dx*dt
+if α>1/3
+    error("Time step to large")
+end
+kernel=α*[1,-2,1] + [0,1,0]
+
+# Initialization of nutrient concentration and cell positions
+C=K*rand(Ngrid,Ngrid)
+
+x=ceil.(Int,rand(Ncell)*Ngrid)
+y=ceil.(Int,rand(Ncell)*Ngrid)
+
+# Run simulation
+function Simulate(C,x,y)
+    @time for t in 1:Nt
+        ## Diffuse columns
+        for i in 1:Ngrid
+            Cnew = conv(C[:,i],kernel)
+            Cnew[2] = Cnew[2] + Cnew[end]
+            Cnew[end-1] = Cnew[end-1] + Cnew[1]
+            C[:,i]=Cnew[2:end-1]
+        end
+
+        ## Diffuse rows
+        for i in 1:Ngrid
+            Cnew = conv(C[i,:],kernel)
+            Cnew[2] = Cnew[2] + Cnew[end]
+            Cnew[end-1] = Cnew[end-1] + Cnew[1]
+            C[i,:]=Cnew[2:end-1]
+        end
+
+        ## Replenish nutrients
+        C = K .+ (C.-K) .* exp(-λ*dt)
+
+        ## Consume
+        for i in 1:Ncell
+            C[x[i],y[i]]=0
+        end
+
+        ## Move cells
+        x = mod.(round.(Int, x.-1 .+ randn(Ncell) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
+        y = mod.(round.(Int, y.-1 .+ randn(Ncell) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
+
+    end
+
+    return C, x, y
+end
+
+C, x, y = Simulate(C,x,y)
