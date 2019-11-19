@@ -1,6 +1,6 @@
 module IBM_Tox_Functions
 
-    export Tox_Grazer
+    export Tox_Grazer, Tox_Allelopathy
 
     using Distributions
 
@@ -57,37 +57,152 @@ module IBM_Tox_Functions
         # toxic cells
         dxC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
         dyC=rand(Normal(0,Δ),size(AC,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-        dxC=floor.(Int,dxC.*L)                # discretizing
-        dyC=floor.(Int,dyC.*L)                # discretizing
+        dxC=floor.(Int,dxC)                # discretizing
+        dyC=floor.(Int,dyC)                # discretizing
         AC[:,1]=mod.(AC[:,1].+dxC,L)          # modulo for torus
         AC[:,2]=mod.(AC[:,2].+dyC,L)          # modulo for torus
         # non-toxic cells
         dxD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
         dyD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
-        dxD=floor.(Int,dxD.*L)                # discretizing
-        dyD=floor.(Int,dyD.*L)                # discretizing
+        dxD=floor.(Int,dxD)                # discretizing
+        dyD=floor.(Int,dyD)                # discretizing
         AD[:,1]=mod.(AD[:,1].+dxD,L)         # modulo for torus
         AD[:,2]=mod.(AD[:,2].+dyD,L)         # modulo for torus
 
-        # ## turbulence
+        ## turbulence
         # phi=rand()*2*pi     # for turbulence in x-direction
         # theta=rand()*2*pi   # for turbulence in y-direction
         # # toxic cells
-        # ddxC=U.*cos.(2 .*pi.*AC[:,2]./L .+phi) # movement in x-direction
-        # ddxC=floor.(Int,ddxC.*L)                # discretizing
+        # ddxC=U.*cos.(2 .*pi.*AC[:,2]./L.+phi) # movement in x-direction
+        # ddxC=floor.(Int,ddxC)                # discretizing
         # AC[:,1]=mod.(AC[:,1].+ddxC,L)
-        # ddyC=U.*cos.(2 .*pi.*AC[:,1]./L .+theta)
-        # ddyC=floor.(Int,ddyC.*L)                # discretizing
+        # ddyC=U.*cos.(2 .*pi.*AC[:,1]./L.+theta)
+        # ddyC=floor.(Int,ddyC)                # discretizing
         # AC[:,2]=mod.(AC[:,2].+ddyC,L)
         # # non-toxic cells
-        # ddxD=U.*cos.(2 .*pi.*AD[:,2]./L .+phi) # movement in x-direction
-        # ddxD=floor.(Int,ddxD.*L)                # discretizing
+        # ddxD=U.*cos.(2 .*pi.*AD[:,2]./L.+phi) # movement in x-direction
+        # ddxD=floor.(Int,ddxD)                # discretizing
         # AD[:,1]=mod.(AD[:,1].+ddxD,L)
-        # ddyD=U.*cos.(2 .*pi.*AD[:,1]./L .+theta)
-        # ddyD=floor.(Int,ddyD.*L)                # discretizing
+        # ddyD=U.*cos.(2 .*pi.*AD[:,1]./L.+theta)
+        # ddyD=floor.(Int,ddyD)                # discretizing
         # AD[:,2]=mod.(AD[:,2].+ddyD,L)
 
         return AC, AD
+    end
+
+    function Tox_Allelopathy(AC1,AC2,AD,LocalTox,LocalComp,L,Δ,U,pC1_max,pC2_max,qC,pD_max,qD,gD_max,H,HC,HD,nC,nComp)
+        ## birth, death and grazing loss
+        # Calculate toxicity environment
+        GlobalTox=zeros(L+1,L+1)                # global toxicity environment (whole space)
+        GlobalComp=zeros(L+1,L+1)               # global competition environment (whole space)
+        for i in 1:size(AC1,1)                   # loop through all toxic cells
+            xrange=AC1[i,1]+1-nC:AC1[i,1]+1+nC    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+            xrange=@. mod(xrange-1,L+1)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
+            yrange=AC1[i,2]+1-nC:AC1[i,2]+1+nC
+            yrange=@. mod(yrange-1,L+1)+1
+            GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
+
+            xrange=AC1[i,1]+1-nComp:AC1[i,1]+1+nComp    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+            xrange=@. mod(xrange-1,L+1)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
+            yrange=AC1[i,2]+1-nComp:AC1[i,2]+1+nComp
+            yrange=@. mod(yrange-1,L+1)+1
+            GlobalComp[xrange,yrange]=GlobalComp[xrange,yrange].+LocalComp # add competition effect of the considered cell
+        end
+
+        for i in 1:size(AC2,1)                   # loop through all non-toxic cells
+            xrange=AC2[i,1]+1-nComp:AC2[i,1]+1+nComp    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+            xrange=@. mod(xrange-1,L+1)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
+            yrange=AC2[i,2]+1-nComp:AC2[i,2]+1+nComp
+            yrange=@. mod(yrange-1,L+1)+1
+            GlobalComp[xrange,yrange]=GlobalComp[xrange,yrange].+LocalComp # add competition effect of the considered cell
+        end
+
+        for i in 1:size(AD,1)                   # loop through all non-toxic cells
+            xrange=AD[i,1]+1-nComp:AD[i,1]+1+nComp    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+            xrange=@. mod(xrange-1,L+1)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
+            yrange=AD[i,2]+1-nComp:AD[i,2]+1+nComp
+            yrange=@. mod(yrange-1,L+1)+1
+            GlobalComp[xrange,yrange]=GlobalComp[xrange,yrange].+LocalComp # add competition effect of the considered cell
+        end
+
+        IndexC1=@. AC1[:,2]*(L+1)+AC1[:,1]+1     # one dimensional index - position of toxic cells species 1
+        IndexC2=@. AC2[:,2]*(L+1)+AC2[:,1]+1     # one dimensional index - position of non-toxic cells species 1
+        IndexD=@. AD[:,2]*(L+1)+AD[:,1]+1     # one dimensional index - position of non-toxic cells species 2
+
+        gD=@. gD_max*GlobalTox[IndexD]/(H+GlobalTox[IndexD])     # probability of dying by toxins of non-toxic cell of species 2
+
+        pC1=@. pC1_max*(1.0-GlobalComp[IndexC1]/(HC+GlobalComp[IndexC1]))      # resource-dependent birth probability of toxic cells of species 1
+        pC2=@. pC2_max*(1.0-GlobalComp[IndexC2]/(HC+GlobalComp[IndexC2]))      # resource-dependent birth probability of non-toxic cells of species 1
+        pD=@. pD_max*(1.0-GlobalComp[IndexD]/(HD+GlobalComp[IndexD]))      # resource-dependent birth probability of non-toxic cells of species 2
+
+        # toxic cells of species 1
+        rv=rand(size(AC1,1))
+        CellsSurv=rv.>(qC)                            # rows of surviving cells (marked with 'true')
+        AC1=AC1[CellsSurv,:]                       # remove dead cells
+        CellsReprod=rv[CellsSurv].>(1 .-pC1[CellsSurv])   # row number of reproducing cells
+        AC1=vcat(AC1,AC1[CellsReprod,:])          # add offsprings --> same position as parents
+        # non-toxic cells of species 1
+        rv=rand(size(AC2,1))
+        CellsSurv=rv.>(qC)                            # rows of surviving cells (marked with 'true')
+        AC2=AC2[CellsSurv,:]                       # remove dead cells
+        CellsReprod=rv[CellsSurv].>(1 .-pC2[CellsSurv])   # row number of reproducing cells
+        AC2=vcat(AC2,AC2[CellsReprod,:])          # add offsprings --> same position as parents
+        # non-toxic cells of species 2
+        rv=rand(size(AD,1))
+        CellsSurv=rv.>(qD.+gD)                            # rows of surviving cells (marked with 'true')
+        AD=AD[CellsSurv,:]                       # remove dead cells
+        CellsReprod=rv[CellsSurv].>(1 .-pD[CellsSurv])   # row number of reproducing cells
+        AD=vcat(AD,AD[CellsReprod,:])          # add offsprings --> same position as parents
+
+        ## diffusion
+        # toxic cells of species 1
+        dxC1=rand(Normal(0,Δ),size(AC1,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dyC1=rand(Normal(0,Δ),size(AC1,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dxC1=floor.(Int,dxC1)                # discretizing
+        dyC1=floor.(Int,dyC1)                # discretizing
+        AC1[:,1]=mod.(AC1[:,1].+dxC1,L)          # modulo for torus
+        AC1[:,2]=mod.(AC1[:,2].+dyC1,L)          # modulo for torus
+        # non-toxic cells of species 1
+        dxC2=rand(Normal(0,Δ),size(AC2,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dyC2=rand(Normal(0,Δ),size(AC2,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dxC2=floor.(Int,dxC2)                # discretizing
+        dyC2=floor.(Int,dyC2)                # discretizing
+        AC2[:,1]=mod.(AC2[:,1].+dxC2,L)          # modulo for torus
+        AC2[:,2]=mod.(AC2[:,2].+dyC2,L)          # modulo for torus
+        # non-toxic cells of species 2
+        dxD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dyD=rand(Normal(0,Δ),size(AD,1))     # gaussian distributed random variable (mean=0, sd=rms=Δ)
+        dxD=floor.(Int,dxD)                # discretizing
+        dyD=floor.(Int,dyD)                # discretizing
+        AD[:,1]=mod.(AD[:,1].+dxD,L)         # modulo for torus
+        AD[:,2]=mod.(AD[:,2].+dyD,L)         # modulo for torus
+
+        ## turbulence
+        # phi=rand()*2*pi     # for turbulence in x-direction
+        # theta=rand()*2*pi   # for turbulence in y-direction
+        # # toxic cells of species 1
+        # ddxC1=U.*cos.(2 .*pi.*AC1[:,2]./L.+phi) # movement in x-direction
+        # ddxC1=floor.(Int,ddxC1)                # discretizing
+        # AC1[:,1]=mod.(AC1[:,1].+ddxC1,L)
+        # ddyC1=U.*cos.(2 .*pi.*AC1[:,1]./L.+theta)
+        # ddyC1=floor.(Int,ddyC1)                # discretizing
+        # AC1[:,2]=mod.(AC1[:,2].+ddyC1,L)
+        # # non-toxic cells of species 1
+        # ddxC2=U.*cos.(2 .*pi.*AC2[:,2]./L.+phi) # movement in x-direction
+        # ddxC2=floor.(Int,ddxC2)                # discretizing
+        # AC2[:,1]=mod.(AC2[:,1].+ddxC2,L)
+        # ddyC2=U.*cos.(2 .*pi.*AC2[:,1]./L.+theta)
+        # ddyC2=floor.(Int,ddyC2)                # discretizing
+        # AC2[:,2]=mod.(AC2[:,2].+ddyC2,L)
+        # # non-toxic cells of species 2
+        # ddxD=U.*cos.(2 .*pi.*AD[:,2]./L.+phi) # movement in x-direction
+        # ddxD=floor.(Int,ddxD)                # discretizing
+        # AD[:,1]=mod.(AD[:,1].+ddxD,L)
+        # ddyD=U.*cos.(2 .*pi.*AD[:,1]./L.+theta)
+        # ddyD=floor.(Int,ddyD)                # discretizing
+        # AD[:,2]=mod.(AD[:,2].+ddyD,L)
+
+        return AC1, AC2, AD
     end
 
 end #module

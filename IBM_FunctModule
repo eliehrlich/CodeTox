@@ -142,23 +142,23 @@ module IBM_FunctModule
         AD[:,1]=mod.(AD[:,1].+dxD,L)         # modulo for torus
         AD[:,2]=mod.(AD[:,2].+dyD,L)         # modulo for torus
 
-        # ## turbulence
-        # phi=rand()*2*pi     # for turbulence in x-direction
-        # theta=rand()*2*pi   # for turbulence in y-direction
-        # # toxic cells
-        # ddxC=U.*cos.(2 .*pi.*AC[:,2]./L.+phi) # movement in x-direction
-        # ddxC=floor.(Int,ddxC.*L)                # discretizing
-        # AC[:,1]=mod.(AC[:,1].+ddxC,L)
-        # ddyC=U.*cos.(2 .*pi.*AC[:,1]./L .+theta)
-        # ddyC=floor.(Int,ddyC.*L)                # discretizing
-        # AC[:,2]=mod.(AC[:,2].+ddyC,L)
-        # # non-toxic cells
-        # ddxD=U.*cos.(2 .*pi.*AD[:,2]./L .+phi) # movement in x-direction
-        # ddxD=floor.(Int,ddxD.*L)                # discretizing
-        # AD[:,1]=mod.(AD[:,1].+ddxD,L)
-        # ddyD=U.*cos.(2 .*pi.*AD[:,1]./L .+theta)
-        # ddyD=floor.(Int,ddyD.*L)                # discretizing
-        # AD[:,2]=mod.(AD[:,2].+ddyD,L)
+        ## turbulence
+        phi=rand()*2*pi     # for turbulence in x-direction
+        theta=rand()*2*pi   # for turbulence in y-direction
+        # toxic cells
+        ddxC=U.*cos.(2 .*pi.*AC[:,2]./L.+phi) # m5 ovement in x-direction
+        ddxC=floor.(Int,ddxC.*L)                # discretizing
+        AC[:,1]=mod.(AC[:,1].+ddxC,L)
+        ddyC=U.*cos.(2 .*pi.*AC[:,1]./L .+theta)
+        ddyC=floor.(Int,ddyC.*L)                # discretizing
+        AC[:,2]=mod.(AC[:,2].+ddyC,L)
+        # non-toxic cells
+        ddxD=U.*cos.(2 .*pi.*AD[:,2]./L .+phi) # movement in x-direction
+        ddxD=floor.(Int,ddxD.*L)                # discretizing
+        AD[:,1]=mod.(AD[:,1].+ddxD,L)
+        ddyD=U.*cos.(2 .*pi.*AD[:,1]./L .+theta)
+        ddyD=floor.(Int,ddyD.*L)                # discretizing
+        AD[:,2]=mod.(AD[:,2].+ddyD,L)
 
         return AC, AD
     end

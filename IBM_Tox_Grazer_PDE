@@ -6,10 +6,11 @@
 # Packages
 using Plots
 using Colors
-using Distributions
+# using Distributions
 using Random
 using DSP
-using ImageFiltering
+# using ImageFiltering
+using FastConv
 
 # Parameters
 ## Number of grid cells on each axis, number of cells, number of time steps
@@ -39,7 +40,10 @@ end
 kernel=α*[1,-2,1] + [0,1,0]
 
 # Initialization of nutrient concentration and cell positions
+Random.seed!(1234)
 C=K*rand(Ngrid,Ngrid)
+
+####---> use CuArrays? cu(C)? --> GPU processing
 
 x=ceil.(Int,rand(Ncell)*Ngrid)
 y=ceil.(Int,rand(Ncell)*Ngrid)
@@ -47,9 +51,18 @@ y=ceil.(Int,rand(Ncell)*Ngrid)
 # Run simulation
 function Simulate(C,x,y)
     @time for t in 1:Nt
+        # ## Diffusion
+        # Cnew=conv(kernel,kernel,C) # convolution for diffusion, instead of conv(C[i,:],kernel) diffusion of rows and then conv(C[:,i],kernel) diffusion of columns --> conv(kernel,kernel,C) both in one step
+        # Cnew[2,:] = Cnew[2,:] .+ Cnew[end,:]
+        # Cnew[end-1,:] = Cnew[end-1,:] .+ Cnew[1,:]
+        # Cnew[:,2] = Cnew[:,2] .+ Cnew[:,end]
+        # Cnew[:,end-1] = Cnew[:,end-1] .+ Cnew[:,1]
+        # C=Cnew[2:end-1,2:end-1]
+
         ## Diffuse columns
         for i in 1:Ngrid
-            Cnew = conv(C[:,i],kernel)
+            # C[:,i] = imfilter(C[:,i],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+            Cnew = convn(C[:,i],kernel) # convn is from Package FastConv
             Cnew[2] = Cnew[2] + Cnew[end]
             Cnew[end-1] = Cnew[end-1] + Cnew[1]
             C[:,i]=Cnew[2:end-1]
@@ -57,7 +70,8 @@ function Simulate(C,x,y)
 
         ## Diffuse rows
         for i in 1:Ngrid
-            Cnew = conv(C[i,:],kernel)
+            # C[i,:] = imfilter(C[i,:],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+            Cnew = convn(C[i,:],kernel)
             Cnew[2] = Cnew[2] + Cnew[end]
             Cnew[end-1] = Cnew[end-1] + Cnew[1]
             C[i,:]=Cnew[2:end-1]
@@ -74,6 +88,11 @@ function Simulate(C,x,y)
         ## Move cells
         x = mod.(round.(Int, x.-1 .+ randn(Ncell) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
         y = mod.(round.(Int, y.-1 .+ randn(Ncell) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
+
+
+        # ## Plot
+        p1=heatmap(C,title="t = $t")
+        display(p1)
 
     end
 

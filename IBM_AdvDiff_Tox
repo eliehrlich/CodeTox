@@ -12,7 +12,8 @@ using Random
 include("./IBM_FunctModule")
 using .IBM_FunctModule
 
-Random.seed!(1234)
+#Random.seed!(1234)
+Random.seed!(1235)
 
 ## Parameters
 L=2*10^3        # Number of discrete 'positions' per dimension (L=10^4 --> resolution 0.0001 = 1mm)
@@ -57,15 +58,6 @@ LocalTox=LocalTox./MaxP         # rescale the values --> between 0 and 1
 AC = rand(0:L,(floor(Int,c0*N0),2))  # Toxic cells --> random x- and y-positions between 0 and L
 AD = rand(0:L,(floor(Int,(1-c0)*N0),2))  # Non-toxic cells --> random x- and y-positions between 0 and L
 
-# scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
-#     mc=:steelblue,msc=:black,ms=2,msw=0.0,
-#     legend=false,dpi=600,reuse=false)
-# scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=2,msw=0.0)
-# xlims!((0.0,1.0))
-# ylims!((0.0,1.0))
-
-#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
-
 FreqC_timeser=zeros(tmax+1)                             # frequency of toxic cells
 FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of toxic cells
 
@@ -86,7 +78,7 @@ end
 
 AC, AD, FreqC_timeser, PopDens = Simulate(AC, AD, FreqC_timeser, PopDens, tmax, LocalTox,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC)
 
-tmax1=1000
+#tmax1=1000
 
 p1=scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
@@ -95,11 +87,11 @@ p1=scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
 scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=1.8,msw=0.0)
 
 p2=plot(0:tmax,FreqC_timeser[1:(tmax+1)],reuse=false,legend=false,
-    xlabel="t",ylabel="Freq. of toxic cells",xlims=(0,tmax1),ylims=(0.0,1.0),
+    xlabel="t",ylabel="Freq. of toxic cells",xlims=(0,tmax),ylims=(0.0,1.0),
     linecolor=:black,linewidth=2)
 
 p3=plot(0:tmax,PopDens[1:(tmax+1),:],reuse=false,legend=false,xlabel="t",ylabel="Abundance",
-    xlims=(0,tmax1),ylim=(10^1,10^6),yaxis=:log,
+    xlims=(0,tmax),ylim=(10^1,10^6),yaxis=:log,
     linecolor=[:red :steelblue],linewidth=2)
 
 #plot(p1,p2,p3, layout=@layout [a{0.8w} grid(2,1)])#grid(3,1,heights=[0.6,0.2,0.2]))
