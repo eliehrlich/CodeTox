@@ -1,0 +1,123 @@
+module IBM_Tox_Functions_PDE
+
+    export Sim_Tox_Graz_PDE
+
+    using FastConv
+
+    function Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,
+                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,Dc,dt,dx,kernel)
+        @time for t in 1:Nt
+            ## Nutrients
+            ### Diffuse columns
+            for i in 1:Ngrid
+                # C[:,i] = imfilter(C[:,i],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+                Cnew = convn(C[:,i],kernel) # convn is from Package FastConv
+                Cnew[2] = Cnew[2] + Cnew[end]
+                Cnew[end-1] = Cnew[end-1] + Cnew[1]
+                C[:,i]=Cnew[2:end-1]
+            end
+
+            ### Diffuse rows
+            for i in 1:Ngrid
+                # C[i,:] = imfilter(C[i,:],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+                Cnew = convn(C[i,:],kernel)
+                Cnew[2] = Cnew[2] + Cnew[end]
+                Cnew[end-1] = Cnew[end-1] + Cnew[1]
+                C[i,:]=Cnew[2:end-1]
+            end
+
+            ### Replenish nutrients
+            C = K .+ (C.-K) .* exp(-δ*dt)
+
+            ### Consume nutrients
+            for i in 1:length(xnon)
+                C[xnon[i],ynon[i]]=0
+            end
+
+            for i in 1:length(xtox)
+                C[xtox[i],ytox[i]]=0
+            end
+
+            ## Toxins
+            ### Toxin leakage
+            for i in 1:length(xtox)
+                T[xtox[i],ytox[i]]=100
+            end
+
+            ### Diffuse columns
+            for i in 1:Ngrid
+                Tnew = convn(T[:,i],kernel) # convn is from Package FastConv
+                Tnew[2] = Tnew[2] + Tnew[end]
+                Tnew[end-1] = Tnew[end-1] + Tnew[1]
+                T[:,i]=Tnew[2:end-1]
+            end
+
+            ### Diffuse rows
+            for i in 1:Ngrid
+                Tnew = convn(T[i,:],kernel)
+                Tnew[2] = Tnew[2] + Tnew[end]
+                Tnew[end-1] = Tnew[end-1] + Tnew[1]
+                T[i,:]=Tnew[2:end-1]
+            end
+
+            ### Toxin decay
+            T = T .* exp(-λ*dt)
+
+            ## Cells
+            ### Move cells
+            xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
+            ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
+            xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
+            ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
+
+            ### Birth and Death (Important: a cell either reproduces or dies or does none of both in one time step)
+            IndexTox=@. (ytox-1)*Ngrid+xtox         # Linear index - position of toxic cells
+            IndexNon=@. (ynon-1)*Ngrid+xnon         # Linear index - position of non-toxic cells
+
+            gtox=@. Gtox*(1.0-T[IndexTox]/(HT+T[IndexTox]))
+            gnon=@. Gnon*(1.0-T[IndexNon]/(HT+T[IndexNon]))
+
+            ptox=@. Ptox*C[IndexTox]/(HC+C[IndexTox])
+            pnon=@. Pnon*C[IndexNon]/(HC+C[IndexNon])
+
+            #### toxic cells
+            rv=rand(length(xtox))
+            CellsSurv=rv.>(mtox.+gtox)                 # Indices of surviving cells (marked with 'true')
+            xtox=xtox[CellsSurv]                       # Remove dead cells
+            ytox=ytox[CellsSurv]                       # Remove dead cells
+            CellsReprod=rv[CellsSurv].>(1 .-ptox[CellsSurv])   # Indices of reproducing cells
+            xtox=vcat(xtox,xtox[CellsReprod])
+            ytox=vcat(ytox,ytox[CellsReprod])
+            #### non-toxic cells
+            rv=rand(length(xnon))
+            CellsSurv=rv.>(mnon.+gnon)                 # Indices of surviving cells (marked with 'true')
+            xnon=xnon[CellsSurv]                       # Remove dead cells
+            ynon=ynon[CellsSurv]                       # Remove dead cells
+            CellsReprod=rv[CellsSurv].>(1 .-pnon[CellsSurv])   # Indices of reproducing cells
+            xnon=vcat(xnon,xnon[CellsReprod])
+            ynon=vcat(ynon,ynon[CellsReprod])
+
+            ## Frequency of toxic cells and population densities
+            FreqTox[t+1]=length(xtox)/(length(xtox)+length(xnon))
+            PopDens[t+1,:]=[length(xnon),length(xtox)]
+
+            # ## Plot
+            # p1=scatter(xnon,ynon,xlabel="x [mm]",ylabel="y [mm]",
+            #     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
+            #     legend=false,reuse=false, #dpi=600)
+            #     xlims=(0,Ngrid),ylims=(0,Ngrid),title="t = $t")
+            # scatter!(xtox,ytox,mc=:red,msc=:black,ms=1.8,msw=0.0)
+            # p2=heatmap(transpose(C))
+            # p3=heatmap(transpose(T))
+            # p4=plot(0:t,PopDens[1:(t+1),:],reuse=false,legend=false,xlabel="t",ylabel="Abundance",
+            #     xlims=(0,Nt),ylim=(10^1,10^6),yaxis=:log,
+            #     linecolor=[:steelblue :red],linewidth=2)
+            # pall=plot(p1,p2,p3,p4)
+            # display(pall)
+
+        end
+
+        return C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens
+    end
+
+end #module

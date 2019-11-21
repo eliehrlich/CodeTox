@@ -6,18 +6,19 @@
 # Packages
 using Plots
 using Colors
-# using Distributions
 using Random
-using DSP
-# using ImageFiltering
-using FastConv # manually modified package by replacing "conv2" with "conv" in elseif-clause, and adding "using DSP"
+#using DSP
+#using FastConv # manually modified package by replacing "conv2" with "conv" in elseif-clause, and adding "using DSP"
+
+include("./IBM_Tox_Functions_PDE")
+using .IBM_Tox_Functions_PDE
 
 # Parameters
-## Number of grid cells on each axis, number of non- and toxic cells, number of time steps
+## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
 Ngrid=200
 Nnon=1000
 Ntox=100
-Nt=100
+Nt=200
 
 ## Carrying capacity of nutrients
 K=64
@@ -27,18 +28,22 @@ K=64
 λ=0.2
 
 ## Max. birth probabilities, natural death probability and maximum graz. mortality probability
-Ptox=0.4
+Ptox=0.5
 Pnon=0.5
-mtox=0.2
-mnon=0.2
+mtox=0.15
+mnon=0.15
 Gtox=0.2
 Gnon=0.2
 
+## Half-saturation constants for nutrients and toxin effect
+HC=5
+HT=50
+
 ## Diffusivity of nutrients, toxins and cells
 Dn=1
-Dc=1
+Dc=10
 
-## Time steps, grid cell size
+## Time step in days, grid cell size in mm
 dt=0.1
 dx=1
 
@@ -50,7 +55,7 @@ end
 kernel=α*[1,-2,1] + [0,1,0]
 
 # Initialization of nutrient conc., toxin conc. and cell positions
-Random.seed!(1234)
+#Random.seed!(1234)
 C=K*rand(Ngrid,Ngrid)
 T=zeros(Ngrid,Ngrid)
 
@@ -59,106 +64,25 @@ ynon=ceil.(Int,rand(Nnon)*Ngrid)
 xtox=ceil.(Int,rand(Ntox)*Ngrid)
 ytox=ceil.(Int,rand(Ntox)*Ngrid)
 
+FreqTox=zeros(Nt+1)                 # Frequency of toxic cells
+FreqTox[1]=Ntox/(Ntox+Nnon)         # Initial frequency of toxic cells
+PopDens=zeros(Nt+1,2)               # Population density of non-toxic and toxic cells
+PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
+
 # Run simulation
-function Simulate(C,T,xnon,ynon,xtox,ytox)
-    @time for t in 1:Nt
-        ## Nutrients
-        ### Diffuse columns
-        for i in 1:Ngrid
-            # C[:,i] = imfilter(C[:,i],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
-            Cnew = convn(C[:,i],kernel) # convn is from Package FastConv
-            Cnew[2] = Cnew[2] + Cnew[end]
-            Cnew[end-1] = Cnew[end-1] + Cnew[1]
-            C[:,i]=Cnew[2:end-1]
-        end
+C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,
+                                                            Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,Dc,dt,dx,kernel)
 
-        ### Diffuse rows
-        for i in 1:Ngrid
-            # C[i,:] = imfilter(C[i,:],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
-            Cnew = convn(C[i,:],kernel)
-            Cnew[2] = Cnew[2] + Cnew[end]
-            Cnew[end-1] = Cnew[end-1] + Cnew[1]
-            C[i,:]=Cnew[2:end-1]
-        end
-
-        ### Replenish nutrients
-        C = K .+ (C.-K) .* exp(-δ*dt)
-
-        ### Consume nutrients
-        for i in 1:Nnon
-            C[xnon[i],ynon[i]]=0
-        end
-
-        for i in 1:Ntox
-            C[xtox[i],ytox[i]]=0
-        end
-
-        ## Toxins
-        ### Toxin leakage
-        for i in 1:Ntox
-            T[xtox[i],ytox[i]]=100
-        end
-
-        ### Diffuse columns
-        for i in 1:Ngrid
-            Tnew = convn(T[:,i],kernel) # convn is from Package FastConv
-            Tnew[2] = Tnew[2] + Tnew[end]
-            Tnew[end-1] = Tnew[end-1] + Tnew[1]
-            T[:,i]=Tnew[2:end-1]
-        end
-
-        ### Diffuse rows
-        for i in 1:Ngrid
-            Tnew = convn(T[i,:],kernel)
-            Tnew[2] = Tnew[2] + Tnew[end]
-            Tnew[end-1] = Tnew[end-1] + Tnew[1]
-            T[i,:]=Tnew[2:end-1]
-        end
-
-        ### Toxin decay
-        T = T .* exp(-λ*dt)
-
-        ## Cells
-        ### Move cells
-        xnon = mod.(round.(Int, xnon.-1 .+ randn(Nnon) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
-        ynon = mod.(round.(Int, ynon.-1 .+ randn(Nnon) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
-        xtox = mod.(round.(Int, xtox.-1 .+ randn(Ntox) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
-        ytox = mod.(round.(Int, ytox.-1 .+ randn(Ntox) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
-
-        ### Birth and Death
-        # IndexTox=@. AC[:,2]*(L+1)+AC[:,1]+1     # one dimensional index - position of toxic cells
-        # IndexNon=@. AD[:,2]*(L+1)+AD[:,1]+1     # one dimensional index - position of non-toxic cells
-        #
-        # gtox=@. Gtox*(1.0-GlobalTox[IndexTox]/(H+GlobalTox[IndexTox]))
-        # gnon=@. Gnon*(1.0-GlobalTox[IndexNon]/(H+GlobalTox[IndexNon]))
-        #
-        # ptox=@. Ptox*(1.0-GlobalComp[IndexTox]/(HC+GlobalComp[IndexTox]))
-        # pnon=@. Pnon*(1.0-GlobalComp[IndexNon]/(HD+GlobalComp[IndexNon]))
-        #
-        # # toxic cells
-        # rv=rand(size(AC,1))
-        # CellsSurv=rv.>(qC.+gC)                            # rows of surviving cells (marked with 'true')
-        # AC=AC[CellsSurv,:]                       # remove dead cells
-        # CellsReprod=rv[CellsSurv].>(1 .-pC[CellsSurv])   # row number of reproducing cells
-        # AC=vcat(AC,AC[CellsReprod,:])          # add offsprings --> same position as parents
-        # # non-toxic cells
-        # rv=rand(size(AD,1))
-        # CellsSurv=rv.>(qD.+gD)                            # rows of surviving cells (marked with 'true')
-        # AD=AD[CellsSurv,:]                       # remove dead cells
-        # CellsReprod=rv[CellsSurv].>(1 .-pD[CellsSurv])   # row number of reproducing cells
-        # AD=vcat(AD,AD[CellsReprod,:])          # add offsprings --> same position as parents
-
-
-
-        # ## Plot
-        # p1=heatmap(C,title="t = $t")
-        # p2=heatmap(T,title="t = $t")
-        # pall=plot(p1,p2)
-        # display(pall)
-
-    end
-
-    return C, T, xnon, ynon, xtox, ytox
-end
-
-C, T, xnon, ynon, xtox, ytox = Simulate(C,T,xnon,ynon,xtox,ytox)
+# Plot
+p1=scatter(xnon,ynon,xlabel="x [mm]",ylabel="y [mm]",
+    mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
+    legend=false,reuse=false, #dpi=600)
+    xlims=(0,Ngrid),ylims=(0,Ngrid),title="t = $Nt")
+scatter!(xtox,ytox,mc=:red,msc=:black,ms=1.8,msw=0.0)
+p2=heatmap(transpose(C),clims=(0,K),title="Nutrient conc.")
+p3=heatmap(transpose(T),clims=(0,100),title="Toxin conc.")
+p4=plot(0:Nt,PopDens[1:(Nt+1),:],reuse=false,legend=false,xlabel="t",ylabel="Abundance",
+    xlims=(0,Nt),ylim=(10^1,10^6),yaxis=:log,
+    linecolor=[:steelblue :red],linewidth=2)
+pall=plot(p1,p2,p3,p4)
+display(pall)
