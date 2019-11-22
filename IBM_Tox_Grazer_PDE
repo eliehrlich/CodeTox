@@ -8,54 +8,76 @@ using Plots
 using Colors
 using Random
 #using DSP
-#using FastConv # manually modified package by replacing "conv2" with "conv" in elseif-clause, and adding "using DSP"
+using FastConv # manually modified package by replacing "conv2" with "conv" in elseif-clause, and adding "using DSP"
 
 include("./IBM_Tox_Functions_PDE")
 using .IBM_Tox_Functions_PDE
 
 # Parameters
+## Resolution: Time step (unit: days), grid cell size (unit: cm)
+dt=0.02
+dx=0.5
+
+## Space width (unit: cm) and simulation time (unit: days)
+L=200
+tmax=500
+
 ## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
-Ngrid=200
+Ngrid=ceil(Int, L/dx)
 Nnon=1000
 Ntox=100
-Nt=200
+Nt=ceil(Int, tmax/dt)
 
-## Carrying capacity of nutrients
+## Carrying capacity of nutrients (unit: µmol l^-1)
 K=64
 
-## Replenishing rate of nutrients and decay rate of toxins
+## Replenishing rate of nutrients and decay rate of toxins (unit: d^-1)
 δ=1
 λ=0.2
 
-## Max. birth probabilities, natural death probability and maximum graz. mortality probability
-Ptox=0.5
-Pnon=0.5
-mtox=0.15
-mnon=0.15
-Gtox=0.2
-Gnon=0.2
+## Max. growth rate, natural mortality rate, max. grazing (loss) rate (unit: d^-1)
+rtox=0.38
+rnon=0.40
+dtox=0.1
+dnon=0.1
+atox=0.22
+anon=0.22
+
+# Max. birth probabilities, natural death probability and maximum graz. mortality probability
+Ptox=exp(rtox*dt)-1     #0.45
+Pnon=exp(rnon*dt)-1     #0.5
+mtox=-exp(-dtox*dt)+1   #0.15
+mnon=-exp(-dnon*dt)+1   #0.15
+Gtox=-exp(-atox*dt)+1   #0.2
+Gnon=-exp(-anon*dt)+1   #0.2
 
 ## Half-saturation constants for nutrients and toxin effect
 HC=5
 HT=50
 
-## Diffusivity of nutrients, toxins and cells
-Dn=1
-Dc=10
+## Diffusivity of nutrients, toxins and cells (unit: cm^2 d^-1)
+Dn=0.864
+Dc=8.640
 
-## Time step in days, grid cell size in mm
-dt=0.1
-dx=1
-
-## Diffusion kernel (1 dimension). Warning! Dn/dx/dx*dt must be <1/3
+## Diffusion kernel (1 or 2 dimension). Warning! Dn/dx/dx*dt must be <1/3
 α=Dn/dx/dx*dt
 if α>1/3
     error("Time step to large")
 end
 kernel=α*[1,-2,1] + [0,1,0]
 
+kernel_2D=zeros(3,3)
+kernel_2D[2,:]=kernel
+for i in 1:3
+    k2D = convn(kernel_2D[:,i],kernel) # convn is from Package FastConv
+    kernel_2D[:,i]=k2D[2:end-1]
+end
+
+## Average diffusion distance of cells (unit: dx=number of grid cells) per time step dt
+Δ=sqrt(2*Dc*dt)/dx
+
 # Initialization of nutrient conc., toxin conc. and cell positions
-#Random.seed!(1234)
+Random.seed!(1234)
 C=K*rand(Ngrid,Ngrid)
 T=zeros(Ngrid,Ngrid)
 
@@ -70,19 +92,20 @@ PopDens=zeros(Nt+1,2)               # Population density of non-toxic and toxic 
 PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
 
 # Run simulation
-C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,
-                                                            Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,Dc,dt,dx,kernel)
+@time C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,
+                                                            Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,dt,kernel,kernel_2D,Δ)
 
 # Plot
-p1=scatter(xnon,ynon,xlabel="x [mm]",ylabel="y [mm]",
+p1=scatter(xnon,ynon,xlabel="x [$dx cm]",ylabel="y [$dx cm]",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
     legend=false,reuse=false, #dpi=600)
-    xlims=(0,Ngrid),ylims=(0,Ngrid),title="t = $Nt")
+    xlims=(0,Ngrid),ylims=(0,Ngrid),title="t = $tmax",
+    guidefontsize=8,titlefontsize=10)
 scatter!(xtox,ytox,mc=:red,msc=:black,ms=1.8,msw=0.0)
-p2=heatmap(transpose(C),clims=(0,K),title="Nutrient conc.")
-p3=heatmap(transpose(T),clims=(0,100),title="Toxin conc.")
-p4=plot(0:Nt,PopDens[1:(Nt+1),:],reuse=false,legend=false,xlabel="t",ylabel="Abundance",
-    xlims=(0,Nt),ylim=(10^1,10^6),yaxis=:log,
-    linecolor=[:steelblue :red],linewidth=2)
+p2=heatmap(transpose(C),clims=(0,K),title="Nutrient conc.",titlefontsize=10)
+p3=heatmap(transpose(T),clims=(0,100),title="Toxin conc.",titlefontsize=10)
+p4=plot(0:dt:tmax,PopDens[1:(Nt+1),:],reuse=false,legend=false,xlabel="t [days]",ylabel="Abundance",
+    xlims=(0,tmax),ylim=(10^1,10^6),yaxis=:log,
+    linecolor=[:steelblue :red],linewidth=2,guidefontsize=8)
 pall=plot(p1,p2,p3,p4)
 display(pall)

@@ -5,9 +5,17 @@ module IBM_Tox_Functions_PDE
     using FastConv
 
     function Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,
-                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,Dc,dt,dx,kernel)
-        @time for t in 1:Nt
+                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,dt,kernel,kernel_2D,Δ)
+        for t in 1:Nt
             ## Nutrients
+            # ### diffusion
+            # Cnew=convn(C,kernel_2D)
+            # Cnew[:,2] = Cnew[:,2] .+ Cnew[:,end]
+            # Cnew[:,end-1] = Cnew[:,end-1] .+ Cnew[:,1]
+            # Cnew[2,:] = Cnew[2,:] .+ Cnew[end,:]
+            # Cnew[end-1,:] = Cnew[end-1,:] .+ Cnew[1,:]
+            # C=Cnew[2:end-1,2:end-1]
+
             ### Diffuse columns
             for i in 1:Ngrid
                 # C[:,i] = imfilter(C[:,i],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
@@ -65,10 +73,10 @@ module IBM_Tox_Functions_PDE
 
             ## Cells
             ### Move cells
-            xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
-            ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
-            xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
-            ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* sqrt(2*Dc*dt)),Ngrid) .+ 1
+            xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
+            ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
+            xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
+            ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
 
             ### Birth and Death (Important: a cell either reproduces or dies or does none of both in one time step)
             IndexTox=@. (ytox-1)*Ngrid+xtox         # Linear index - position of toxic cells
