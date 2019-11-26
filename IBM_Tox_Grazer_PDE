@@ -14,13 +14,13 @@ include("./IBM_Tox_Functions_PDE")
 using .IBM_Tox_Functions_PDE
 
 # Parameters
-## Resolution: Time step (unit: days), grid cell size (unit: cm)
-dt=0.02
-dx=0.5
+## Resolution: Time step [days], grid cell size [cm]
+dt=0.1 #0.02
+dx=1   #0.5
 
-## Space width (unit: cm) and simulation time (unit: days)
-L=200
-tmax=500
+## Space width [cm] and simulation time [days]
+L=100
+tmax=1000
 
 ## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
 Ngrid=ceil(Int, L/dx)
@@ -28,14 +28,15 @@ Nnon=1000
 Ntox=100
 Nt=ceil(Int, tmax/dt)
 
-## Carrying capacity of nutrients (unit: µmol l^-1)
-K=64
+## Carrying capacity of nutrients [µmol ml^-1]
+K=64  #0.01*dx^2 #64
 
-## Replenishing rate of nutrients and decay rate of toxins (unit: d^-1)
+## Replenishing rate of nutrients [d^-1], decay rate of toxins [d^-1], toxin leakage rate [1 fmol d^-1]
 δ=1
 λ=0.2
+Q=1
 
-## Max. growth rate, natural mortality rate, max. grazing (loss) rate (unit: d^-1)
+## Max. growth rate, natural mortality rate, max. grazing (loss) rate [d^-1]
 rtox=0.38
 rnon=0.40
 dtox=0.1
@@ -43,7 +44,7 @@ dnon=0.1
 atox=0.22
 anon=0.22
 
-# Max. birth probabilities, natural death probability and maximum graz. mortality probability
+## Max. birth probabilities, natural death probability and maximum graz. mortality probability
 Ptox=exp(rtox*dt)-1     #0.45
 Pnon=exp(rnon*dt)-1     #0.5
 mtox=-exp(-dtox*dt)+1   #0.15
@@ -51,11 +52,14 @@ mnon=-exp(-dnon*dt)+1   #0.15
 Gtox=-exp(-atox*dt)+1   #0.2
 Gnon=-exp(-anon*dt)+1   #0.2
 
-## Half-saturation constants for nutrients and toxin effect
-HC=5
-HT=50
+## Half-saturation constants for nutrients [µmol dx^-2] and toxin effect [fmol dx^-2]
+HC=5    # 0.005*dx^2    # 5 µmol N l^-1 --> 0.005 µmol N ml^-1 --> 0.005 µmol N cm^-2
+HT=0.1
 
-## Diffusivity of nutrients, toxins and cells (unit: cm^2 d^-1)
+## Maximum nutrient uptake rate [µmol cell^-1 d^-1]
+vmax=2*10^-4
+
+## Diffusivity of nutrients, toxins and cells [cm^2 d^-1]
 Dn=0.864
 Dc=8.640
 
@@ -73,7 +77,7 @@ for i in 1:3
     kernel_2D[:,i]=k2D[2:end-1]
 end
 
-## Average diffusion distance of cells (unit: dx=number of grid cells) per time step dt
+## Average diffusion distance of cells [units: dx=number of grid cells] per time step dt
 Δ=sqrt(2*Dc*dt)/dx
 
 # Initialization of nutrient conc., toxin conc. and cell positions
@@ -92,20 +96,22 @@ PopDens=zeros(Nt+1,2)               # Population density of non-toxic and toxic 
 PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
 
 # Run simulation
-@time C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,
-                                                            Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,dt,kernel,kernel_2D,Δ)
+@time C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,Q,
+                                                            Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,vmax,dt,kernel,kernel_2D,Δ)
 
 # Plot
-p1=scatter(xnon,ynon,xlabel="x [$dx cm]",ylabel="y [$dx cm]",
+p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",
     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
     legend=false,reuse=false, #dpi=600)
-    xlims=(0,Ngrid),ylims=(0,Ngrid),title="t = $tmax",
+    xlims=(0,L),ylims=(0,L),title="t = $tmax d",
     guidefontsize=8,titlefontsize=10)
 scatter!(xtox,ytox,mc=:red,msc=:black,ms=1.8,msw=0.0)
-p2=heatmap(transpose(C),clims=(0,K),title="Nutrient conc.",titlefontsize=10)
-p3=heatmap(transpose(T),clims=(0,100),title="Toxin conc.",titlefontsize=10)
-p4=plot(0:dt:tmax,PopDens[1:(Nt+1),:],reuse=false,legend=false,xlabel="t [days]",ylabel="Abundance",
+p2=heatmap(1:dx:L,1:dx:L,transpose(C),clims=(0,K),title="Nutrient conc.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
+p3=heatmap(1:dx:L,1:dx:L,transpose(T),clims=(0,0.6),title="Toxin conc.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
+p4=plot(0:dt:tmax,PopDens[1:(Nt+1),:],reuse=false,legend=false,xlabel="t [d]",ylabel="Abundance",
     xlims=(0,tmax),ylim=(10^1,10^6),yaxis=:log,
     linecolor=[:steelblue :red],linewidth=2,guidefontsize=8)
 pall=plot(p1,p2,p3,p4)
 display(pall)
+
+# savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\Tox_Grazer\\HighHNResult")

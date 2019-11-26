@@ -3,54 +3,51 @@ module IBM_Tox_Functions_PDE
     export Sim_Tox_Graz_PDE
 
     using FastConv
+    using Plots
 
-    function Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,
-                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,dt,kernel,kernel_2D,Δ)
+    function Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,Q,
+                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,vmax,dt,kernel,kernel_2D,Δ)
         for t in 1:Nt
             ## Nutrients
-            # ### diffusion
-            # Cnew=convn(C,kernel_2D)
-            # Cnew[:,2] = Cnew[:,2] .+ Cnew[:,end]
-            # Cnew[:,end-1] = Cnew[:,end-1] .+ Cnew[:,1]
-            # Cnew[2,:] = Cnew[2,:] .+ Cnew[end,:]
-            # Cnew[end-1,:] = Cnew[end-1,:] .+ Cnew[1,:]
-            # C=Cnew[2:end-1,2:end-1]
+            ### diffusion
+            Cnew=convn(C,kernel_2D)
+            Cnew[:,2] = Cnew[:,2] .+ Cnew[:,end]
+            Cnew[:,end-1] = Cnew[:,end-1] .+ Cnew[:,1]
+            Cnew[2,:] = Cnew[2,:] .+ Cnew[end,:]
+            Cnew[end-1,:] = Cnew[end-1,:] .+ Cnew[1,:]
+            C=Cnew[2:end-1,2:end-1]
 
-            ### Diffuse columns
-            for i in 1:Ngrid
-                # C[:,i] = imfilter(C[:,i],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
-                Cnew = convn(C[:,i],kernel) # convn is from Package FastConv
-                Cnew[2] = Cnew[2] + Cnew[end]
-                Cnew[end-1] = Cnew[end-1] + Cnew[1]
-                C[:,i]=Cnew[2:end-1]
-            end
-
-            ### Diffuse rows
-            for i in 1:Ngrid
-                # C[i,:] = imfilter(C[i,:],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
-                Cnew = convn(C[i,:],kernel)
-                Cnew[2] = Cnew[2] + Cnew[end]
-                Cnew[end-1] = Cnew[end-1] + Cnew[1]
-                C[i,:]=Cnew[2:end-1]
-            end
+            # ### Diffuse columns
+            # for i in 1:Ngrid
+            #     # C[:,i] = imfilter(C[:,i],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+            #     Cnew = convn(C[:,i],kernel) # convn is from Package FastConv
+            #     Cnew[2] = Cnew[2] + Cnew[end]
+            #     Cnew[end-1] = Cnew[end-1] + Cnew[1]
+            #     C[:,i]=Cnew[2:end-1]
+            # end
+            #
+            # ### Diffuse rows
+            # for i in 1:Ngrid
+            #     # C[i,:] = imfilter(C[i,:],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+            #     Cnew = convn(C[i,:],kernel)
+            #     Cnew[2] = Cnew[2] + Cnew[end]
+            #     Cnew[end-1] = Cnew[end-1] + Cnew[1]
+            #     C[i,:]=Cnew[2:end-1]
+            # end
 
             ### Replenish nutrients
             C = K .+ (C.-K) .* exp(-δ*dt)
 
             ### Consume nutrients
-            for i in 1:length(xnon)
-                C[xnon[i],ynon[i]]=0
-            end
+            IndexTox=@. (ytox-1)*Ngrid+xtox         # Linear index - position of toxic cells
+            IndexNon=@. (ynon-1)*Ngrid+xnon         # Linear index - position of non-toxic cells
 
-            for i in 1:length(xtox)
-                C[xtox[i],ytox[i]]=0
-            end
+            C[IndexNon]=zeros(length(IndexNon))        #C[xnon[i],ynon[i]]-vmax*C[xnon[i],ynon[i]]/(C[xnon[i],ynon[i]]+HC)*dt
+            C[IndexTox]=zeros(length(IndexTox))
 
             ## Toxins
             ### Toxin leakage
-            for i in 1:length(xtox)
-                T[xtox[i],ytox[i]]=100
-            end
+            T[IndexTox]=@. T[IndexTox] + Q*dt # plus 1 fmol Toxin per day
 
             ### Diffuse columns
             for i in 1:Ngrid
@@ -110,16 +107,17 @@ module IBM_Tox_Functions_PDE
             PopDens[t+1,:]=[length(xnon),length(xtox)]
 
             # ## Plot
-            # p1=scatter(xnon,ynon,xlabel="x [mm]",ylabel="y [mm]",
+            # p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",
             #     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
             #     legend=false,reuse=false, #dpi=600)
-            #     xlims=(0,Ngrid),ylims=(0,Ngrid),title="t = $t")
+            #     xlims=(0,Ngrid),ylims=(0,Ngrid),title="t = $t",
+            #     guidefontsize=8,titlefontsize=10)
             # scatter!(xtox,ytox,mc=:red,msc=:black,ms=1.8,msw=0.0)
-            # p2=heatmap(transpose(C))
-            # p3=heatmap(transpose(T))
-            # p4=plot(0:t,PopDens[1:(t+1),:],reuse=false,legend=false,xlabel="t",ylabel="Abundance",
-            #     xlims=(0,Nt),ylim=(10^1,10^6),yaxis=:log,
-            #     linecolor=[:steelblue :red],linewidth=2)
+            # p2=heatmap(transpose(C),clims=(0,K),title="Nutrient conc.",titlefontsize=10)
+            # p3=heatmap(transpose(T),clims=(0,100),title="Toxin conc.",titlefontsize=10)
+            # p4=plot(0:dt:t*dt,PopDens[1:(t+1),:],reuse=false,legend=false,xlabel="t [days]",ylabel="Abundance",
+            #     xlims=(0,Nt*dt),ylim=(10^1,10^6),yaxis=:log,
+            #     linecolor=[:steelblue :red],linewidth=2,guidefontsize=8)
             # pall=plot(p1,p2,p3,p4)
             # display(pall)
 
@@ -127,5 +125,5 @@ module IBM_Tox_Functions_PDE
 
         return C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens
     end
-
+    
 end #module
