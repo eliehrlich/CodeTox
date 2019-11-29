@@ -56,8 +56,8 @@ Gnon=-exp(-anon*dt)+1   #0.2
 HC=5    # 0.005*dx^2    # 5 µmol N l^-1 --> 0.005 µmol N ml^-1 --> 0.005 µmol N cm^-2
 HT=0.1
 
-## Maximum nutrient uptake rate [µmol cell^-1 d^-1]
-vmax=2*10^-4
+## Cell quota [nmol N cell^-1]
+qN=0.01
 
 ## Diffusivity of nutrients, toxins and cells [cm^2 d^-1]
 Dn=0.864
@@ -97,7 +97,7 @@ PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
 
 # Run simulation
 @time C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,Q,
-                                                            Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,vmax,dt,kernel,kernel_2D,Δ)
+                                                            Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel,kernel_2D,Δ)
 
 # Plot
 p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",

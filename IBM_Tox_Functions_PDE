@@ -6,8 +6,73 @@ module IBM_Tox_Functions_PDE
     using Plots
 
     function Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,Q,
-                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,vmax,dt,kernel,kernel_2D,Δ)
+                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel,kernel_2D,Δ)
         for t in 1:Nt
+            ## 1. Birth and death of cells
+            ### (a cell either reproduces or dies or does none of both in one time step)
+            IndexTox=@. (ytox-1)*Ngrid+xtox         # Linear index - position of toxic cells
+            IndexNon=@. (ynon-1)*Ngrid+xnon         # Linear index - position of non-toxic cells
+            gtox=@. Gtox*(1.0-T[IndexTox]/(HT+T[IndexTox]))
+            gnon=@. Gnon*(1.0-T[IndexNon]/(HT+T[IndexNon]))
+            ptox=@. Ptox*C[IndexTox]/(HC+C[IndexTox])
+            pnon=@. Pnon*C[IndexNon]/(HC+C[IndexNon])
+
+            ### Toxic cells
+            rv=rand(length(xtox))
+            #### Death and survival
+            CellsDead=rv.<=(mtox.+gtox)
+            CellsSurv=rv.>(mtox.+gtox)                 # Indices of surviving cells (marked with 'true')
+            xtox_dead=xtox[CellsDead]
+            ytox_dead=ytox[CellsDead]
+            xtox=xtox[CellsSurv]                       # Remove dead cells
+            ytox=ytox[CellsSurv]                       # Remove dead cells
+            #### Birth
+            CellsReprod=rv[CellsSurv].>(1 .-ptox[CellsSurv])   # Indices of reproducing cells
+            xtox_birth=xtox[CellsReprod]
+            ytox_birth=ytox[CellsReprod]
+            xtox=vcat(xtox,xtox_birth)
+            ytox=vcat(ytox,ytox_birth)
+
+            ### Non-toxic cells
+            rv=rand(length(xnon))
+            #### Death and survival
+            CellsDead=rv.<=(mnon.+gnon)
+            CellsSurv=rv.>(mnon.+gnon)                 # Indices of surviving cells (marked with 'true')
+            xnon_dead=xnon[CellsDead]
+            ynon_dead=ynon[CellsDead]
+            xnon=xnon[CellsSurv]                       # Remove dead cells
+            ynon=ynon[CellsSurv]                       # Remove dead cells
+            #### Birth
+            CellsReprod=rv[CellsSurv].>(1 .-pnon[CellsSurv])   # Indices of reproducing cells
+            xnon_birth=xnon[CellsReprod]
+            ynon_birth=ynon[CellsReprod]
+            xnon=vcat(xnon,xnon_birth)
+            ynon=vcat(ynon,ynon_birth)
+
+            ### Update frequency of toxic cells and population densities
+            FreqTox[t+1]=length(xtox)/(length(xtox)+length(xnon))
+            PopDens[t+1,:]=[length(xnon),length(xtox)]
+
+            ## 2. Consumption and recycling of Nutrients
+            ### Consume Nutrients
+            IndexBirth=@. (vcat(ytox_birth,ynon_birth)-1)*Ngrid+vcat(xtox_birth,xnon_birth)   # Linear index - position of new born cells
+            C[IndexBirth]=C[IndexBirth].-qN
+            ### Recycle Nutrients
+            IndexDeath=@. (vcat(ytox_dead,ynon_dead)-1)*Ngrid+vcat(xtox_dead,xnon_dead)   # Linear index - position of dead cells
+            C[IndexDeath]=C[IndexDeath].+qN
+
+            ## 3. Toxin leakage and decay
+            ### Leak Toxins
+            IndexTox=@. (ytox-1)*Ngrid+xtox
+            T_leak=repeat(Q*dt,length(IndexTox))
+            ### Decay Toxins
+            T_decay=λ.*dt.*T
+            ### Update Toxin concentration
+            T[IndexTox]=T[IndexTox].+T_leak
+            T=T.-T_decay
+            # ### Toxin decay
+            # T = T .* exp(-λ*dt)
+
             ## Nutrients
             ### diffusion
             Cnew=convn(C,kernel_2D)
@@ -35,19 +100,11 @@ module IBM_Tox_Functions_PDE
             #     C[i,:]=Cnew[2:end-1]
             # end
 
-            ### Replenish nutrients
-            C = K .+ (C.-K) .* exp(-δ*dt)
 
-            ### Consume nutrients
-            IndexTox=@. (ytox-1)*Ngrid+xtox         # Linear index - position of toxic cells
-            IndexNon=@. (ynon-1)*Ngrid+xnon         # Linear index - position of non-toxic cells
-
-            C[IndexNon]=zeros(length(IndexNon))        #C[xnon[i],ynon[i]]-vmax*C[xnon[i],ynon[i]]/(C[xnon[i],ynon[i]]+HC)*dt
-            C[IndexTox]=zeros(length(IndexTox))
 
             ## Toxins
-            ### Toxin leakage
-            T[IndexTox]=@. T[IndexTox] + Q*dt # plus 1 fmol Toxin per day
+            # ### Toxin leakage
+            # T[IndexTox]=@. T[IndexTox] + Q*dt # plus 1 fmol Toxin per day
 
             ### Diffuse columns
             for i in 1:Ngrid
@@ -65,8 +122,7 @@ module IBM_Tox_Functions_PDE
                 T[i,:]=Tnew[2:end-1]
             end
 
-            ### Toxin decay
-            T = T .* exp(-λ*dt)
+
 
             ## Cells
             ### Move cells
@@ -75,36 +131,7 @@ module IBM_Tox_Functions_PDE
             xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
             ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
 
-            ### Birth and Death (Important: a cell either reproduces or dies or does none of both in one time step)
-            IndexTox=@. (ytox-1)*Ngrid+xtox         # Linear index - position of toxic cells
-            IndexNon=@. (ynon-1)*Ngrid+xnon         # Linear index - position of non-toxic cells
 
-            gtox=@. Gtox*(1.0-T[IndexTox]/(HT+T[IndexTox]))
-            gnon=@. Gnon*(1.0-T[IndexNon]/(HT+T[IndexNon]))
-
-            ptox=@. Ptox*C[IndexTox]/(HC+C[IndexTox])
-            pnon=@. Pnon*C[IndexNon]/(HC+C[IndexNon])
-
-            #### toxic cells
-            rv=rand(length(xtox))
-            CellsSurv=rv.>(mtox.+gtox)                 # Indices of surviving cells (marked with 'true')
-            xtox=xtox[CellsSurv]                       # Remove dead cells
-            ytox=ytox[CellsSurv]                       # Remove dead cells
-            CellsReprod=rv[CellsSurv].>(1 .-ptox[CellsSurv])   # Indices of reproducing cells
-            xtox=vcat(xtox,xtox[CellsReprod])
-            ytox=vcat(ytox,ytox[CellsReprod])
-            #### non-toxic cells
-            rv=rand(length(xnon))
-            CellsSurv=rv.>(mnon.+gnon)                 # Indices of surviving cells (marked with 'true')
-            xnon=xnon[CellsSurv]                       # Remove dead cells
-            ynon=ynon[CellsSurv]                       # Remove dead cells
-            CellsReprod=rv[CellsSurv].>(1 .-pnon[CellsSurv])   # Indices of reproducing cells
-            xnon=vcat(xnon,xnon[CellsReprod])
-            ynon=vcat(ynon,ynon[CellsReprod])
-
-            ## Frequency of toxic cells and population densities
-            FreqTox[t+1]=length(xtox)/(length(xtox)+length(xnon))
-            PopDens[t+1,:]=[length(xnon),length(xtox)]
 
             # ## Plot
             # p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",
@@ -125,5 +152,5 @@ module IBM_Tox_Functions_PDE
 
         return C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens
     end
-    
+
 end #module
