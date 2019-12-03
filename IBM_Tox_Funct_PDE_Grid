@@ -1,0 +1,143 @@
+module IBM_Tox_Funct_PDE_Grid
+
+    export Sim_Graz_PDE
+
+    using FastConv
+    # using Plots
+
+    function Sim_Graz_PDE(C,T,Atox,Anon,FreqTox,PopDens,Ngrid,Nt,λ,Q,
+                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
+        Atox_Birth=zeros(Int,Ngrid,Ngrid)
+        Anon_Birth=zeros(Int,Ngrid,Ngrid)
+        Atox_Dead=zeros(Int,Ngrid,Ngrid)
+        Anon_Dead=zeros(Int,Ngrid,Ngrid)
+
+        for t in 1:Nt
+            ## 1. Birth and death of cells
+            gtox=@. Gtox*(1.0-T/(HT+T))
+            gnon=@. Gnon*(1.0-T/(HT+T))
+            ptox=@. Ptox*C/(HC+C)
+            pnon=@. Pnon*C/(HC+C)
+
+            for i in 1:Ngrid, j in 1:Ngrid
+                if Atox[i,j]+Anon[i,j]>0
+                ### Birth
+                MaxNBirth=floor(Int,C[i,j]/qN) # Max number of possible births depending on nutrient conc.
+                rv=rand(Atox[i,j]+Anon[i,j])
+                p=vcat(fill(ptox[i,j],Atox[i,j]),fill(pnon[i,j],Anon[i,j]))
+                PotBirth=rv.<=p # Potential births
+                NPotBirth=count(PotBirth)
+                if count(PotBirth)>0
+                    NoBirth=maximum([0,NPotBirth-MaxNBirth]) # Number of potential births not realized
+                    PosNoBirth=rand(1:NPotBirth,NoBirth)
+                    IndexNoBirth=findall(x->x==true,PotBirth)[PosNoBirth]
+                    PotBirth[IndexNoBirth].=false   # Realized birth
+                end
+                Atox_Birth[i,j]=count(PotBirth[1:Atox[i,j]])
+                Anon_Birth[i,j]=count(PotBirth[(Atox[i,j]+1):(Atox[i,j]+Anon[i,j])])
+
+                ### Death
+                rv=rand(Atox[i,j])
+                Atox_Dead[i,j]=count(rv.<=mtox+gtox[i,j])
+                rv=rand(Anon[i,j])
+                Anon_Dead[i,j]=count(rv.<=mnon+gnon[i,j])
+            end
+
+            ### Update cell number
+            @. Atox = Atox + Atox_Birth - Atox_Dead
+            @. Anon = Anon + Anon_Birth - Anon_Dead
+
+            ### Update frequency of toxic cells and population densities
+            FreqTox[t+1]=sum(Atox)/(sum(Atox)+sum(Anon))
+            PopDens[t+1,:]=[sum(Anon),sum(Atox)]
+
+            ## 2. Consumption and recycling of Nutrients
+            @. C = C + (-Atox_Birth - Anon_Birth + Atox_Dead + Anon_Dead) * qN
+
+            ## 3. Toxin leakage and decay
+            T = (T .- Q.*Atox./λ).*exp(-λ*dt) .+ Q.*Atox./λ
+
+            ## 4. Movement/Diffusion of cells, nutrients and toxins
+            ### Move cells
+            Atox_new=zeros(Int,Ngrid,Ngrid)
+            Anon_new=zeros(Int,Ngrid,Ngrid)
+
+            for i in 1:Ngrid, j in 1:Ngrid
+                xtox = fill(j,Atox[i,j])
+                ytox = fill(i,Atox[i,j])
+                xnon = fill(j,Anon[i,j])
+                ynon = fill(i,Anon[i,j])
+
+                xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
+                ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
+                xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
+                ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
+
+                for k in 1:length(xtox)
+                    Atox_new[ytox[k],xtox[k]]+=1
+                end
+
+                for k in 1:length(xnon)
+                    Anon_new[ynon[k],xnon[k]]+=1
+                end
+            end
+
+            Atox=Atox_new
+            Anon=Anon_new
+
+            ### Diffuse nutrients
+            Cnew=convn(C,kernel_2D)
+            Cnew[:,2] = Cnew[:,2] .+ Cnew[:,end]
+            Cnew[:,end-1] = Cnew[:,end-1] .+ Cnew[:,1]
+            Cnew[2,:] = Cnew[2,:] .+ Cnew[end,:]
+            Cnew[end-1,:] = Cnew[end-1,:] .+ Cnew[1,:]
+            C=Cnew[2:end-1,2:end-1]
+
+            ### Diffuse toxins
+            Tnew=convn(T,kernel_2D)
+            Tnew[:,2] = Tnew[:,2] .+ Tnew[:,end]
+            Tnew[:,end-1] = Tnew[:,end-1] .+ Tnew[:,1]
+            Tnew[2,:] = Tnew[2,:] .+ Tnew[end,:]
+            Tnew[end-1,:] = Tnew[end-1,:] .+ Tnew[1,:]
+            T=Tnew[2:end-1,2:end-1]
+
+            # ## Plot
+            # p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",
+            #     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
+            #     legend=false,reuse=false, #dpi=600)
+            #     xlims=(0,Ngrid),ylims=(0,Ngrid),title="t = $t",
+            #     guidefontsize=8,titlefontsize=10)
+            # scatter!(xtox,ytox,mc=:red,msc=:black,ms=1.8,msw=0.0)
+            # p2=heatmap(transpose(C),clims=(0,K),title="Nutrient conc.",titlefontsize=10)
+            # p3=heatmap(transpose(T),clims=(0,100),title="Toxin conc.",titlefontsize=10)
+            # p4=plot(0:dt:t*dt,PopDens[1:(t+1),:],reuse=false,legend=false,xlabel="t [days]",ylabel="Abundance",
+            #     xlims=(0,Nt*dt),ylim=(10^1,10^6),yaxis=:log,
+            #     linecolor=[:steelblue :red],linewidth=2,guidefontsize=8)
+            # pall=plot(p1,p2,p3,p4)
+            # display(pall)
+
+        end
+
+        return C, T, Atox, Anon, FreqTox, PopDens
+    end
+
+end #module
+
+
+# ### Diffuse columns
+# for i in 1:Ngrid
+#     # C[:,i] = imfilter(C[:,i],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+#     Cnew = convn(C[:,i],kernel) # convn is from Package FastConv
+#     Cnew[2] = Cnew[2] + Cnew[end]
+#     Cnew[end-1] = Cnew[end-1] + Cnew[1]
+#     C[:,i]=Cnew[2:end-1]
+# end
+#
+# ### Diffuse rows
+# for i in 1:Ngrid
+#     # C[i,:] = imfilter(C[i,:],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+#     Cnew = convn(C[i,:],kernel)
+#     Cnew[2] = Cnew[2] + Cnew[end]
+#     Cnew[end-1] = Cnew[end-1] + Cnew[1]
+#     C[i,:]=Cnew[2:end-1]
+# end

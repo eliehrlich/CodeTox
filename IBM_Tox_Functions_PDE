@@ -5,8 +5,8 @@ module IBM_Tox_Functions_PDE
     using FastConv
     using Plots
 
-    function Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,Q,
-                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel,kernel_2D,Δ)
+    function Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,λ,Q,
+                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
         for t in 1:Nt
             ## 1. Birth and death of cells
             ### (a cell either reproduces or dies or does none of both in one time step)
@@ -20,14 +20,14 @@ module IBM_Tox_Functions_PDE
             ### Toxic cells
             rv=rand(length(xtox))
             #### Death and survival
-            CellsDead=rv.<=(mtox.+gtox)
+            CellsDead=rv.<=(mtox.+gtox)                # Indices of dying cells (marked with 'true')
             CellsSurv=rv.>(mtox.+gtox)                 # Indices of surviving cells (marked with 'true')
             xtox_dead=xtox[CellsDead]
             ytox_dead=ytox[CellsDead]
             xtox=xtox[CellsSurv]                       # Remove dead cells
             ytox=ytox[CellsSurv]                       # Remove dead cells
             #### Birth
-            CellsReprod=rv[CellsSurv].>(1 .-ptox[CellsSurv])   # Indices of reproducing cells
+            CellsReprod=rv[CellsSurv].>(1 .-ptox[CellsSurv])   # Indices of reproducing cells (marked with 'true')
             xtox_birth=xtox[CellsReprod]
             ytox_birth=ytox[CellsReprod]
             xtox=vcat(xtox,xtox_birth)
@@ -37,13 +37,13 @@ module IBM_Tox_Functions_PDE
             rv=rand(length(xnon))
             #### Death and survival
             CellsDead=rv.<=(mnon.+gnon)
-            CellsSurv=rv.>(mnon.+gnon)                 # Indices of surviving cells (marked with 'true')
+            CellsSurv=rv.>(mnon.+gnon)
             xnon_dead=xnon[CellsDead]
             ynon_dead=ynon[CellsDead]
-            xnon=xnon[CellsSurv]                       # Remove dead cells
-            ynon=ynon[CellsSurv]                       # Remove dead cells
+            xnon=xnon[CellsSurv]
+            ynon=ynon[CellsSurv]
             #### Birth
-            CellsReprod=rv[CellsSurv].>(1 .-pnon[CellsSurv])   # Indices of reproducing cells
+            CellsReprod=rv[CellsSurv].>(1 .-pnon[CellsSurv])
             xnon_birth=xnon[CellsReprod]
             ynon_birth=ynon[CellsReprod]
             xnon=vcat(xnon,xnon_birth)
@@ -55,26 +55,36 @@ module IBM_Tox_Functions_PDE
 
             ## 2. Consumption and recycling of Nutrients
             ### Consume Nutrients
-            IndexBirth=@. (vcat(ytox_birth,ynon_birth)-1)*Ngrid+vcat(xtox_birth,xnon_birth)   # Linear index - position of new born cells
-            C[IndexBirth]=C[IndexBirth].-qN
+            IndexBirth=(vcat(ytox_birth,ynon_birth).-1).*Ngrid.+vcat(xtox_birth,xnon_birth)   # Linear index - position of new born cells
+            for i in IndexBirth
+                C[i]=C[i]-qN
+            end
+
             ### Recycle Nutrients
-            IndexDeath=@. (vcat(ytox_dead,ynon_dead)-1)*Ngrid+vcat(xtox_dead,xnon_dead)   # Linear index - position of dead cells
-            C[IndexDeath]=C[IndexDeath].+qN
+            IndexDeath=(vcat(ytox_dead,ynon_dead).-1).*Ngrid.+vcat(xtox_dead,xnon_dead)   # Linear index - position of dead cells
+            for i in IndexDeath
+                C[i]=C[i]+qN
+            end
+
 
             ## 3. Toxin leakage and decay
-            ### Leak Toxins
             IndexTox=@. (ytox-1)*Ngrid+xtox
-            T_leak=repeat(Q*dt,length(IndexTox))
-            ### Decay Toxins
             T_decay=λ.*dt.*T
-            ### Update Toxin concentration
-            T[IndexTox]=T[IndexTox].+T_leak
+            ### Leak toxins
+            for i in IndexTox
+                T[i]=T[i]+Q*dt
+            end
+            ### Decay toxins
             T=T.-T_decay
-            # ### Toxin decay
-            # T = T .* exp(-λ*dt)
 
-            ## Nutrients
-            ### diffusion
+            ## 4. Movement/Diffusion of cells, nutrients and toxins
+            ### Move cells
+            xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
+            ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
+            xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
+            ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
+
+            ### Diffuse nutrients
             Cnew=convn(C,kernel_2D)
             Cnew[:,2] = Cnew[:,2] .+ Cnew[:,end]
             Cnew[:,end-1] = Cnew[:,end-1] .+ Cnew[:,1]
@@ -82,56 +92,13 @@ module IBM_Tox_Functions_PDE
             Cnew[end-1,:] = Cnew[end-1,:] .+ Cnew[1,:]
             C=Cnew[2:end-1,2:end-1]
 
-            # ### Diffuse columns
-            # for i in 1:Ngrid
-            #     # C[:,i] = imfilter(C[:,i],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
-            #     Cnew = convn(C[:,i],kernel) # convn is from Package FastConv
-            #     Cnew[2] = Cnew[2] + Cnew[end]
-            #     Cnew[end-1] = Cnew[end-1] + Cnew[1]
-            #     C[:,i]=Cnew[2:end-1]
-            # end
-            #
-            # ### Diffuse rows
-            # for i in 1:Ngrid
-            #     # C[i,:] = imfilter(C[i,:],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
-            #     Cnew = convn(C[i,:],kernel)
-            #     Cnew[2] = Cnew[2] + Cnew[end]
-            #     Cnew[end-1] = Cnew[end-1] + Cnew[1]
-            #     C[i,:]=Cnew[2:end-1]
-            # end
-
-
-
-            ## Toxins
-            # ### Toxin leakage
-            # T[IndexTox]=@. T[IndexTox] + Q*dt # plus 1 fmol Toxin per day
-
-            ### Diffuse columns
-            for i in 1:Ngrid
-                Tnew = convn(T[:,i],kernel) # convn is from Package FastConv
-                Tnew[2] = Tnew[2] + Tnew[end]
-                Tnew[end-1] = Tnew[end-1] + Tnew[1]
-                T[:,i]=Tnew[2:end-1]
-            end
-
-            ### Diffuse rows
-            for i in 1:Ngrid
-                Tnew = convn(T[i,:],kernel)
-                Tnew[2] = Tnew[2] + Tnew[end]
-                Tnew[end-1] = Tnew[end-1] + Tnew[1]
-                T[i,:]=Tnew[2:end-1]
-            end
-
-
-
-            ## Cells
-            ### Move cells
-            xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
-            ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
-            xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
-            ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
-
-
+            ### Diffuse toxins
+            Tnew=convn(T,kernel_2D)
+            Tnew[:,2] = Tnew[:,2] .+ Tnew[:,end]
+            Tnew[:,end-1] = Tnew[:,end-1] .+ Tnew[:,1]
+            Tnew[2,:] = Tnew[2,:] .+ Tnew[end,:]
+            Tnew[end-1,:] = Tnew[end-1,:] .+ Tnew[1,:]
+            T=Tnew[2:end-1,2:end-1]
 
             # ## Plot
             # p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",
@@ -154,3 +121,22 @@ module IBM_Tox_Functions_PDE
     end
 
 end #module
+
+
+# ### Diffuse columns
+# for i in 1:Ngrid
+#     # C[:,i] = imfilter(C[:,i],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+#     Cnew = convn(C[:,i],kernel) # convn is from Package FastConv
+#     Cnew[2] = Cnew[2] + Cnew[end]
+#     Cnew[end-1] = Cnew[end-1] + Cnew[1]
+#     C[:,i]=Cnew[2:end-1]
+# end
+#
+# ### Diffuse rows
+# for i in 1:Ngrid
+#     # C[i,:] = imfilter(C[i,:],kernel, "circular") # Convolution for diffusion with imfilter function, mode "circular" for torus
+#     Cnew = convn(C[i,:],kernel)
+#     Cnew[2] = Cnew[2] + Cnew[end]
+#     Cnew[end-1] = Cnew[end-1] + Cnew[1]
+#     C[i,:]=Cnew[2:end-1]
+# end

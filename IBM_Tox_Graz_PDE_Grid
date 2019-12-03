@@ -10,8 +10,8 @@ using Random
 #using DSP
 using FastConv # manually modified package by replacing "conv2" with "conv" in elseif-clause, and adding "using DSP"
 
-include("./IBM_Tox_Functions_PDE")
-using .IBM_Tox_Functions_PDE
+include("./IBM_Tox_Funct_PDE_Grid")
+using .IBM_Tox_Funct_PDE_Grid
 
 # Parameters
 ## Resolution: Time step [days], grid cell size [cm]
@@ -20,7 +20,7 @@ dx=1   #0.5
 
 ## Space width [cm] and simulation time [days]
 L=100
-tmax=60
+tmax=10
 
 ## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
 Ngrid=ceil(Int, L/dx)
@@ -84,33 +84,37 @@ Random.seed!(1234)
 C=fill(K,Ngrid,Ngrid)#2*K*rand(Ngrid,Ngrid)
 T=zeros(Ngrid,Ngrid)
 
-xnon=ceil.(Int,rand(Nnon)*Ngrid)
-ynon=ceil.(Int,rand(Nnon)*Ngrid)
-xtox=ceil.(Int,rand(Ntox)*Ngrid)
-ytox=ceil.(Int,rand(Ntox)*Ngrid)
+Atox=zeros(Int,Ngrid,Ngrid)
+Anon=zeros(Int,Ngrid,Ngrid)
+Pos_tox=rand(1:length(Atox),Ntox)
+Pos_non=rand(1:length(Anon),Nnon)
+for i in 1:Ntox
+    Atox[Pos_tox[i]]+=1
+end
+for i in 1:Nnon
+    Anon[Pos_non[i]]+=1
+end
 
 FreqTox=zeros(Nt+1)                 # Frequency of toxic cells
 FreqTox[1]=Ntox/(Ntox+Nnon)         # Initial frequency of toxic cells
-PopDens=zeros(Nt+1,2)               # Population density of non-toxic and toxic cells
+PopDens=zeros(Int,Nt+1,2)           # Population density of non-toxic and toxic cells
 PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
 
 # Run simulation
-@time C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,λ,Q,
+@time C, T, Atox, Anon, FreqTox, PopDens = Sim_Graz_PDE(C,T,Atox,Anon,FreqTox,PopDens,Ngrid,Nt,λ,Q,
                                                             Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
 
 # Plot
-p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",
-    mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
-    legend=false,reuse=false, #dpi=600)
-    xlims=(0,L),ylims=(0,L),title="t = $tmax d",
-    guidefontsize=8,titlefontsize=10)
-scatter!(xtox,ytox,mc=:red,msc=:black,ms=1.8,msw=0.0)
-p2=heatmap(1:dx:L,1:dx:L,transpose(C),clims=(minimum(C),maximum(C)),title="Nutrient conc.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
-p3=heatmap(1:dx:L,1:dx:L,transpose(T),clims=(0,maximum(T)),title="Toxin conc.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
-p4=plot(0:dt:tmax,PopDens[1:(Nt+1),:],reuse=false,legend=false,xlabel="t [d]",ylabel="Abundance",
+p1=heatmap(1:dx:L,1:dx:L,transpose(Anon),clims=(0,maximum(Anon)),title="Non-toxic cells dens.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
+p2=heatmap(1:dx:L,1:dx:L,transpose(Atox),clims=(0,maximum(Atox)),title="Toxic cells density",titlefontsize=10,xlims=(0,L),ylims=(0,L))
+p3=heatmap(1:dx:L,1:dx:L,transpose(C),clims=(minimum(C),maximum(C)),title="Nutrient conc.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
+p4=heatmap(1:dx:L,1:dx:L,transpose(T),clims=(0,maximum(T)),title="Toxin conc.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
+p5=plot(0:dt:tmax,PopDens[1:(Nt+1),:],reuse=false,legend=false,xlabel="t [d]",ylabel="Abundance",
     xlims=(0,tmax),ylim=(10^1,10^6),yaxis=:log,
     linecolor=[:steelblue :red],linewidth=2,guidefontsize=8)
 pall=plot(p1,p2,p3,p4)
 display(pall)
+
+display(p5)
 
 # savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\Tox_Grazer\\HighHNResult")
