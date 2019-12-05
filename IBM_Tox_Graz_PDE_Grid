@@ -15,12 +15,12 @@ using .IBM_Tox_Funct_PDE_Grid
 
 # Parameters
 ## Resolution: Time step [days], grid cell size [cm]
-dt=0.1 #0.02
+dt=0.2 #0.02
 dx=1   #0.5
 
 ## Space width [cm] and simulation time [days]
-L=100
-tmax=10
+L=50
+tmax=50
 
 ## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
 Ngrid=ceil(Int, L/dx)
@@ -101,7 +101,7 @@ PopDens=zeros(Int,Nt+1,2)           # Population density of non-toxic and toxic 
 PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
 
 # Run simulation
-@time C, T, Atox, Anon, FreqTox, PopDens = Sim_Graz_PDE(C,T,Atox,Anon,FreqTox,PopDens,Ngrid,Nt,λ,Q,
+@time C, T, Atox, Anon, FreqTox, PopDens = IBM_Tox_Funct_PDE_Grid.Sim_Graz_PDE(C,T,Atox,Anon,FreqTox,PopDens,Ngrid,Nt,λ,Q,
                                                             Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
 
 # Plot

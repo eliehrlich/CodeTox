@@ -3,75 +3,105 @@ module IBM_Tox_Functions_PDE
     export Sim_Tox_Graz_PDE
 
     using FastConv
-    using Plots
+    # using Plots
 
-    function Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,λ,Q,
-                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
+    function findall3(f, a::Array{Int64,1})
+        j = 1
+        b = Vector{Int}(undef, length(a))
+        @inbounds for i in eachindex(a)
+            @inbounds if f(a[i])
+                b[j] = i
+                j += 1
+            end
+        end
+        resize!(b, j-1)
+        sizehint!(b, length(b))
+        return b
+    end
+
+    function RealReprod(PotBirth::BitArray{1},MaxNBirth::Int64)
+        NPotBirth=length(PotBirth)
+        NoBirth=maximum([0,NPotBirth-MaxNBirth]) # Number of potential births not realized
+        IndexNoBirth=rand(1:NPotBirth,NoBirth)
+        PotBirth[IndexNoBirth].=false   # Realized birth
+
+        return PotBirth
+    end
+
+    function Sim_Tox_Graz_PDE(C::Array{Float64,2},T::Array{Float64,2},xnon::Array{Int64,1},ynon::Array{Int64,1},
+                        xtox::Array{Int64,1},ytox::Array{Int64,1},FreqTox::Array{Float64,1},PopDens ::Array{Float64,2},
+                        Ngrid::Int64,Nt::Int64,λ::Float64,Q::Float64,Ptox::Float64,Pnon::Float64,mtox::Float64,
+                        mnon::Float64,Gtox::Float64,Gnon::Float64,HC::Float64,HT::Float64,
+                        qN::Float64,dt::Float64,kernel_2D::Array{Float64,2},Δ::Float64)
         for t in 1:Nt
             ## 1. Birth and death of cells
-            ### (a cell either reproduces or dies or does none of both in one time step)
-            IndexTox=@. (ytox-1)*Ngrid+xtox         # Linear index - position of toxic cells
-            IndexNon=@. (ynon-1)*Ngrid+xnon         # Linear index - position of non-toxic cells
-            gtox=@. Gtox*(1.0-T[IndexTox]/(HT+T[IndexTox]))
-            gnon=@. Gnon*(1.0-T[IndexNon]/(HT+T[IndexNon]))
-            ptox=@. Ptox*C[IndexTox]/(HC+C[IndexTox])
-            pnon=@. Pnon*C[IndexNon]/(HC+C[IndexNon])
+            PosTox=@. (ytox-1)*Ngrid+xtox         # Linear index - position of toxic cells
+            PosNon=@. (ynon-1)*Ngrid+xnon         # Linear index - position of non-toxic cells
+            Pos=vcat(PosTox,PosNon)
+            ptox=@. Ptox*C[PosTox]/(HC+C[PosTox])
+            pnon=@. Pnon*C[PosNon]/(HC+C[PosNon])
+            p=vcat(ptox,pnon)
+            gtox=@. Gtox*(1.0-T[PosTox]/(HT+T[PosTox]))
+            gnon=@. Gnon*(1.0-T[PosNon]/(HT+T[PosNon]))
 
-            ### Toxic cells
-            rv=rand(length(xtox))
-            #### Death and survival
-            CellsDead=rv.<=(mtox.+gtox)                # Indices of dying cells (marked with 'true')
-            CellsSurv=rv.>(mtox.+gtox)                 # Indices of surviving cells (marked with 'true')
-            xtox_dead=xtox[CellsDead]
-            ytox_dead=ytox[CellsDead]
-            xtox=xtox[CellsSurv]                       # Remove dead cells
-            ytox=ytox[CellsSurv]                       # Remove dead cells
-            #### Birth
-            CellsReprod=rv[CellsSurv].>(1 .-ptox[CellsSurv])   # Indices of reproducing cells (marked with 'true')
-            xtox_birth=xtox[CellsReprod]
-            ytox_birth=ytox[CellsReprod]
-            xtox=vcat(xtox,xtox_birth)
-            ytox=vcat(ytox,ytox_birth)
+            ### Birth
+            rv=rand(length(Pos))
+            CellsReprod=rv.<=p
+            IndexReprodTrue=findall(x -> x == true, CellsReprod) # Indices of array CellsReprod at which =true
+            AllPos=unique(Pos[IndexReprodTrue]) # All positions at which potential birth
+            for i in AllPos
+                MaxNBirth=floor(Int,C[i]/qN)
+                Ind_i=findall3(x -> (x == i), Pos[IndexReprodTrue])
+                IndexReprodTrue_i=IndexReprodTrue[Ind_i]
+                CellsReprod[IndexReprodTrue_i]=RealReprod(CellsReprod[IndexReprodTrue_i],MaxNBirth) # Correcting number of birth depending on nutrient concentration
+            end
+            CellsReprodTox=CellsReprod[1:length(PosTox)]
+            CellsReprodNon=CellsReprod[length(PosTox)+1:end]
+            xtox_birth=xtox[CellsReprodTox]
+            ytox_birth=ytox[CellsReprodTox]
+            xnon_birth=xnon[CellsReprodNon]
+            ynon_birth=ynon[CellsReprodNon]
 
-            ### Non-toxic cells
-            rv=rand(length(xnon))
-            #### Death and survival
-            CellsDead=rv.<=(mnon.+gnon)
-            CellsSurv=rv.>(mnon.+gnon)
-            xnon_dead=xnon[CellsDead]
-            ynon_dead=ynon[CellsDead]
-            xnon=xnon[CellsSurv]
-            ynon=ynon[CellsSurv]
-            #### Birth
-            CellsReprod=rv[CellsSurv].>(1 .-pnon[CellsSurv])
-            xnon_birth=xnon[CellsReprod]
-            ynon_birth=ynon[CellsReprod]
-            xnon=vcat(xnon,xnon_birth)
-            ynon=vcat(ynon,ynon_birth)
+            ### Death
+            rvtox=rand(length(xtox))
+            rvnon=rand(length(xnon))
+            CellsDeadTox=rvtox.<=(mtox.+gtox)                # Indices of dying cells (marked with 'true')
+            CellsDeadNon=rvnon.<=(mnon.+gnon)
+            CellsSurvTox=rvtox.>(mtox.+gtox)                # Indices of dying cells (marked with 'true')
+            CellsSurvNon=rvnon.>(mnon.+gnon)
+            xtox_dead=xtox[CellsDeadTox]
+            ytox_dead=ytox[CellsDeadTox]
+            xnon_dead=xnon[CellsDeadNon]
+            ynon_dead=ynon[CellsDeadNon]
 
-            ### Update frequency of toxic cells and population densities
+            ### Update population
+            xtox=vcat(xtox[CellsSurvTox],xtox_birth)
+            ytox=vcat(ytox[CellsSurvTox],ytox_birth)
+            xnon=vcat(xnon[CellsSurvNon],xnon_birth)
+            ynon=vcat(ynon[CellsSurvNon],ynon_birth)
+
             FreqTox[t+1]=length(xtox)/(length(xtox)+length(xnon))
             PopDens[t+1,:]=[length(xnon),length(xtox)]
 
             ## 2. Consumption and recycling of Nutrients
             ### Consume Nutrients
-            IndexBirth=(vcat(ytox_birth,ynon_birth).-1).*Ngrid.+vcat(xtox_birth,xnon_birth)   # Linear index - position of new born cells
-            for i in IndexBirth
+            PosBirth=(vcat(ytox_birth,ynon_birth).-1).*Ngrid.+vcat(xtox_birth,xnon_birth)   # Linear index - position of new born cells
+            for i in PosBirth
                 C[i]=C[i]-qN
             end
 
             ### Recycle Nutrients
-            IndexDeath=(vcat(ytox_dead,ynon_dead).-1).*Ngrid.+vcat(xtox_dead,xnon_dead)   # Linear index - position of dead cells
-            for i in IndexDeath
+            PosDeath=(vcat(ytox_dead,ynon_dead).-1).*Ngrid.+vcat(xtox_dead,xnon_dead)   # Linear index - position of dead cells
+            for i in PosDeath
                 C[i]=C[i]+qN
             end
 
 
             ## 3. Toxin leakage and decay
-            IndexTox=@. (ytox-1)*Ngrid+xtox
+            PosTox=@. (ytox-1)*Ngrid+xtox
             T_decay=λ.*dt.*T
             ### Leak toxins
-            for i in IndexTox
+            for i in PosTox
                 T[i]=T[i]+Q*dt
             end
             ### Decay toxins
@@ -79,10 +109,10 @@ module IBM_Tox_Functions_PDE
 
             ## 4. Movement/Diffusion of cells, nutrients and toxins
             ### Move cells
-            xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
-            ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
             xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
             ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
+            xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
+            ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
 
             ### Diffuse nutrients
             Cnew=convn(C,kernel_2D)
@@ -119,8 +149,9 @@ module IBM_Tox_Functions_PDE
 
         return C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens
     end
-
 end #module
+
+
 
 
 # ### Diffuse columns

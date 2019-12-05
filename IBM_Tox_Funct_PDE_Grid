@@ -4,6 +4,7 @@ module IBM_Tox_Funct_PDE_Grid
 
     using FastConv
     # using Plots
+    import Base.Threads.@threads
 
     function Sim_Graz_PDE(C,T,Atox,Anon,FreqTox,PopDens,Ngrid,Nt,λ,Q,
                         Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
@@ -19,28 +20,31 @@ module IBM_Tox_Funct_PDE_Grid
             ptox=@. Ptox*C/(HC+C)
             pnon=@. Pnon*C/(HC+C)
 
-            for i in 1:Ngrid, j in 1:Ngrid
-                if Atox[i,j]+Anon[i,j]>0
-                ### Birth
-                MaxNBirth=floor(Int,C[i,j]/qN) # Max number of possible births depending on nutrient conc.
-                rv=rand(Atox[i,j]+Anon[i,j])
-                p=vcat(fill(ptox[i,j],Atox[i,j]),fill(pnon[i,j],Anon[i,j]))
-                PotBirth=rv.<=p # Potential births
-                NPotBirth=count(PotBirth)
-                if count(PotBirth)>0
-                    NoBirth=maximum([0,NPotBirth-MaxNBirth]) # Number of potential births not realized
-                    PosNoBirth=rand(1:NPotBirth,NoBirth)
-                    IndexNoBirth=findall(x->x==true,PotBirth)[PosNoBirth]
-                    PotBirth[IndexNoBirth].=false   # Realized birth
-                end
-                Atox_Birth[i,j]=count(PotBirth[1:Atox[i,j]])
-                Anon_Birth[i,j]=count(PotBirth[(Atox[i,j]+1):(Atox[i,j]+Anon[i,j])])
+            for i in 1:Ngrid
+                for j in 1:Ngrid
+                    if Atox[i,j]+Anon[i,j]>0
+                        ### Birth
+                        MaxNBirth=floor(Int,C[i,j]/qN) # Max number of possible births depending on nutrient conc.
+                        rv=rand(Atox[i,j]+Anon[i,j])
+                        p=vcat(fill(ptox[i,j],Atox[i,j]),fill(pnon[i,j],Anon[i,j]))
+                        PotBirth=rv.<=p # Potential births
+                        NPotBirth=count(PotBirth)
+                        if NPotBirth>0
+                            NoBirth=maximum([0,NPotBirth-MaxNBirth]) # Number of potential births not realized
+                            PosNoBirth=rand(1:NPotBirth,NoBirth)
+                            IndexNoBirth=findall(x->x==true,PotBirth)[PosNoBirth]
+                            PotBirth[IndexNoBirth].=false   # Realized birth
+                        end
+                        Atox_Birth[i,j]=count(PotBirth[1:Atox[i,j]])
+                        Anon_Birth[i,j]=count(PotBirth[(Atox[i,j]+1):(Atox[i,j]+Anon[i,j])])
+                    end
 
-                ### Death
-                rv=rand(Atox[i,j])
-                Atox_Dead[i,j]=count(rv.<=mtox+gtox[i,j])
-                rv=rand(Anon[i,j])
-                Anon_Dead[i,j]=count(rv.<=mnon+gnon[i,j])
+                    ### Death
+                    rv=rand(Atox[i,j])
+                    Atox_Dead[i,j]=count(rv.<=mtox+gtox[i,j])
+                    rv=rand(Anon[i,j])
+                    Anon_Dead[i,j]=count(rv.<=mnon+gnon[i,j])
+                end
             end
 
             ### Update cell number
@@ -62,23 +66,25 @@ module IBM_Tox_Funct_PDE_Grid
             Atox_new=zeros(Int,Ngrid,Ngrid)
             Anon_new=zeros(Int,Ngrid,Ngrid)
 
-            for i in 1:Ngrid, j in 1:Ngrid
-                xtox = fill(j,Atox[i,j])
-                ytox = fill(i,Atox[i,j])
-                xnon = fill(j,Anon[i,j])
-                ynon = fill(i,Anon[i,j])
+            for i in 1:Ngrid
+                for j in 1:Ngrid
+                    xtox = fill(j,Atox[i,j])
+                    ytox = fill(i,Atox[i,j])
+                    xnon = fill(j,Anon[i,j])
+                    ynon = fill(i,Anon[i,j])
 
-                xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
-                ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
-                xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
-                ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
+                    xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
+                    ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
+                    xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
+                    ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
 
-                for k in 1:length(xtox)
-                    Atox_new[ytox[k],xtox[k]]+=1
-                end
+                    for k in 1:length(xtox)
+                        Atox_new[ytox[k],xtox[k]]+=1
+                    end
 
-                for k in 1:length(xnon)
-                    Anon_new[ynon[k],xnon[k]]+=1
+                    for k in 1:length(xnon)
+                        Anon_new[ynon[k],xnon[k]]+=1
+                    end
                 end
             end
 

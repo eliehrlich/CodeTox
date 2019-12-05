@@ -9,18 +9,19 @@ using Colors
 using Random
 #using DSP
 using FastConv # manually modified package by replacing "conv2" with "conv" in elseif-clause, and adding "using DSP"
+using BenchmarkTools
 
 include("./IBM_Tox_Functions_PDE")
 using .IBM_Tox_Functions_PDE
 
 # Parameters
 ## Resolution: Time step [days], grid cell size [cm]
-dt=0.1 #0.02
+dt=0.2 #0.02
 dx=1   #0.5
 
 ## Space width [cm] and simulation time [days]
 L=100
-tmax=60
+tmax=100
 
 ## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
 Ngrid=ceil(Int, L/dx)
@@ -29,11 +30,11 @@ Ntox=100
 Nt=ceil(Int, tmax/dt)
 
 ## Initial, spatially averaged nutrient concentration [nmol ml^-1]
-K=0.1*dx^2  #0.01*dx^2
+K=0.05*dx^2  #0.01*dx^2
 
 ## Decay rate of toxins [d^-1], toxin leakage rate [1 fmol d^-1]
 λ=0.2
-Q=1
+Q=1.0
 
 ## Max. growth rate, natural mortality rate, max. grazing (loss) rate [d^-1]
 rtox=0.38
@@ -95,7 +96,7 @@ PopDens=zeros(Nt+1,2)               # Population density of non-toxic and toxic 
 PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
 
 # Run simulation
-@time C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,λ,Q,
+@time C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = IBM_Tox_Functions_PDE.Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,λ,Q,
                                                             Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
 
 # Plot
