@@ -20,20 +20,20 @@ dx=1   #0.5
 
 ## Space width [cm] and simulation time [days]
 L=50
-tmax=50
+tmax=100
 
 ## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
-Ngrid=ceil(Int, L/dx)
+Ngrid=ceil(Int64, L/dx)
 Nnon=1000
 Ntox=100
-Nt=ceil(Int, tmax/dt)
+Nt=ceil(Int64, tmax/dt)
 
 ## Initial, spatially averaged nutrient concentration [nmol ml^-1]
 K=0.1*dx^2  #0.01*dx^2
 
 ## Decay rate of toxins [d^-1], toxin leakage rate [1 fmol d^-1]
 λ=0.2
-Q=1
+Q=1.0
 
 ## Max. growth rate, natural mortality rate, max. grazing (loss) rate [d^-1]
 rtox=0.38
@@ -50,6 +50,11 @@ mtox=-exp(-dtox*dt)+1   #0.15
 mnon=-exp(-dnon*dt)+1   #0.15
 Gtox=-exp(-atox*dt)+1   #0.2
 Gnon=-exp(-anon*dt)+1   #0.2
+
+ptox=zeros(Float64,Ngrid,Ngrid)
+pnon=zeros(Float64,Ngrid,Ngrid)
+gtox=zeros(Float64,Ngrid,Ngrid)
+gnon=zeros(Float64,Ngrid,Ngrid)
 
 ## Half-saturation constants for nutrients [nmol dx^-2] and toxin effect [fmol dx^-2]
 HC=K/5
@@ -84,8 +89,8 @@ Random.seed!(1234)
 C=fill(K,Ngrid,Ngrid)#2*K*rand(Ngrid,Ngrid)
 T=zeros(Ngrid,Ngrid)
 
-Atox=zeros(Int,Ngrid,Ngrid)
-Anon=zeros(Int,Ngrid,Ngrid)
+Atox=zeros(Int64,Ngrid,Ngrid)
+Anon=zeros(Int64,Ngrid,Ngrid)
 Pos_tox=rand(1:length(Atox),Ntox)
 Pos_non=rand(1:length(Anon),Nnon)
 for i in 1:Ntox
@@ -97,18 +102,18 @@ end
 
 FreqTox=zeros(Nt+1)                 # Frequency of toxic cells
 FreqTox[1]=Ntox/(Ntox+Nnon)         # Initial frequency of toxic cells
-PopDens=zeros(Int,Nt+1,2)           # Population density of non-toxic and toxic cells
+PopDens=zeros(Int64,Nt+1,2)           # Population density of non-toxic and toxic cells
 PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
 
 # Run simulation
 @time C, T, Atox, Anon, FreqTox, PopDens = IBM_Tox_Funct_PDE_Grid.Sim_Graz_PDE(C,T,Atox,Anon,FreqTox,PopDens,Ngrid,Nt,λ,Q,
-                                                            Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
+                                                            Ptox,Pnon,ptox,pnon,mtox,mnon,Gtox,Gnon,gtox,gnon,HC,HT,qN,dt,kernel_2D,Δ)
 
 # Plot
 p1=heatmap(1:dx:L,1:dx:L,transpose(Anon),clims=(0,maximum(Anon)),title="Non-toxic cells dens.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
 p2=heatmap(1:dx:L,1:dx:L,transpose(Atox),clims=(0,maximum(Atox)),title="Toxic cells density",titlefontsize=10,xlims=(0,L),ylims=(0,L))
 p3=heatmap(1:dx:L,1:dx:L,transpose(C),clims=(minimum(C),maximum(C)),title="Nutrient conc.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
-p4=heatmap(1:dx:L,1:dx:L,transpose(T),clims=(0,maximum(T)),title="Toxin conc.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
+p4=heatmap(1:dx:L,1:dx:L,transpose(T),clims=(minimum(T),maximum(T)),title="Toxin conc.",titlefontsize=10,xlims=(0,L),ylims=(0,L))
 p5=plot(0:dt:tmax,PopDens[1:(Nt+1),:],reuse=false,legend=false,xlabel="t [d]",ylabel="Abundance",
     xlims=(0,tmax),ylim=(10^1,10^6),yaxis=:log,
     linecolor=[:steelblue :red],linewidth=2,guidefontsize=8)

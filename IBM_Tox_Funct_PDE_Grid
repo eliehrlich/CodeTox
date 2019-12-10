@@ -3,47 +3,69 @@ module IBM_Tox_Funct_PDE_Grid
     export Sim_Graz_PDE
 
     using FastConv
+    using StatsBase
     # using Plots
-    import Base.Threads.@threads
+    # import Base.Threads.@threads
+
+    function Diffusion(X::Array{Float64,2},kernel_2D::Array{Float64,2})
+        Xnew=convn(X,kernel_2D)
+        Xnew[:,2] = Xnew[:,2] .+ Xnew[:,end]
+        Xnew[:,end-1] = Xnew[:,end-1] .+ Xnew[:,1]
+        Xnew[2,:] = Xnew[2,:] .+ Xnew[end,:]
+        Xnew[end-1,:] = Xnew[end-1,:] .+ Xnew[1,:]
+        X=Xnew[2:end-1,2:end-1]
+        return X
+    end
+
+    function Move(xy::Int64,Ngrid::Int64,Δ::Float64)
+        mod(round(Int64, xy-1 + randn() * Δ),Ngrid) + 1
+    end
+
+    function Death(N,m,g)
+        count(rand(N).<=m+g)
+    end
 
     function Sim_Graz_PDE(C,T,Atox,Anon,FreqTox,PopDens,Ngrid,Nt,λ,Q,
-                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
-        Atox_Birth=zeros(Int,Ngrid,Ngrid)
-        Anon_Birth=zeros(Int,Ngrid,Ngrid)
-        Atox_Dead=zeros(Int,Ngrid,Ngrid)
-        Anon_Dead=zeros(Int,Ngrid,Ngrid)
+                        Ptox,Pnon,ptox,pnon,mtox,mnon,Gtox,Gnon,gtox,gnon,HC,HT,qN,dt,kernel_2D,Δ)
+        Atox_Birth=zeros(Int64,Ngrid,Ngrid)
+        Anon_Birth=zeros(Int64,Ngrid,Ngrid)
+        Atox_Dead=zeros(Int64,Ngrid,Ngrid)
+        Anon_Dead=zeros(Int64,Ngrid,Ngrid)
+        Atox_new=zeros(Int64,Ngrid,Ngrid)
+        Anon_new=zeros(Int64,Ngrid,Ngrid)
 
         for t in 1:Nt
             ## 1. Birth and death of cells
-            gtox=@. Gtox*(1.0-T/(HT+T))
-            gnon=@. Gnon*(1.0-T/(HT+T))
-            ptox=@. Ptox*C/(HC+C)
-            pnon=@. Pnon*C/(HC+C)
+            @. gtox=Gtox*(1.0-T/(HT+T))
+            @. gnon=Gnon*(1.0-T/(HT+T))
+            @. ptox=Ptox*C/(HC+C)
+            @. pnon=Pnon*C/(HC+C)
+
+            Atox_Birth=fill!(Atox_Birth, 0)
+            Anon_Birth=fill!(Anon_Birth, 0)
 
             for i in 1:Ngrid
                 for j in 1:Ngrid
                     if Atox[i,j]+Anon[i,j]>0
                         ### Birth
-                        MaxNBirth=floor(Int,C[i,j]/qN) # Max number of possible births depending on nutrient conc.
+                        MaxNBirth=floor(Int64,C[i,j]/qN) # Max number of possible births depending on nutrient conc.
                         rv=rand(Atox[i,j]+Anon[i,j])
                         p=vcat(fill(ptox[i,j],Atox[i,j]),fill(pnon[i,j],Anon[i,j]))
                         PotBirth=rv.<=p # Potential births
                         NPotBirth=count(PotBirth)
-                        if NPotBirth>0
-                            NoBirth=maximum([0,NPotBirth-MaxNBirth]) # Number of potential births not realized
-                            PosNoBirth=rand(1:NPotBirth,NoBirth)
+                        NoBirth=NPotBirth-MaxNBirth # Number of potential births not realized
+                        if NoBirth>0
+                            PosNoBirth=sample(1:NPotBirth,NoBirth,replace=false) # without replacement!!! otherwise it could pick an index twice
                             IndexNoBirth=findall(x->x==true,PotBirth)[PosNoBirth]
                             PotBirth[IndexNoBirth].=false   # Realized birth
                         end
                         Atox_Birth[i,j]=count(PotBirth[1:Atox[i,j]])
-                        Anon_Birth[i,j]=count(PotBirth[(Atox[i,j]+1):(Atox[i,j]+Anon[i,j])])
+                        Anon_Birth[i,j]=count(PotBirth[(Atox[i,j]+1):end])
                     end
 
                     ### Death
-                    rv=rand(Atox[i,j])
-                    Atox_Dead[i,j]=count(rv.<=mtox+gtox[i,j])
-                    rv=rand(Anon[i,j])
-                    Anon_Dead[i,j]=count(rv.<=mnon+gnon[i,j])
+                    Atox_Dead[i,j]=Death(Atox[i,j],mtox,gtox[i,j])
+                    Anon_Dead[i,j]=Death(Anon[i,j],mnon,gnon[i,j])
                 end
             end
 
@@ -59,53 +81,32 @@ module IBM_Tox_Funct_PDE_Grid
             @. C = C + (-Atox_Birth - Anon_Birth + Atox_Dead + Anon_Dead) * qN
 
             ## 3. Toxin leakage and decay
-            T = (T .- Q.*Atox./λ).*exp(-λ*dt) .+ Q.*Atox./λ
+            @. T = (T - Q*Atox/λ)*exp(-λ*dt) + Q*Atox/λ
 
             ## 4. Movement/Diffusion of cells, nutrients and toxins
             ### Move cells
-            Atox_new=zeros(Int,Ngrid,Ngrid)
-            Anon_new=zeros(Int,Ngrid,Ngrid)
+            Atox_new=fill!(Atox_new, 0)
+            Anon_new=fill!(Anon_new, 0)
 
             for i in 1:Ngrid
                 for j in 1:Ngrid
-                    xtox = fill(j,Atox[i,j])
-                    ytox = fill(i,Atox[i,j])
-                    xnon = fill(j,Anon[i,j])
-                    ynon = fill(i,Anon[i,j])
-
-                    xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
-                    ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
-                    xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
-                    ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
-
-                    for k in 1:length(xtox)
-                        Atox_new[ytox[k],xtox[k]]+=1
+                    for k in 1:Atox[i,j]
+                        Atox_new[Move(i,Ngrid,Δ),Move(j,Ngrid,Δ)]+=1
                     end
-
-                    for k in 1:length(xnon)
-                        Anon_new[ynon[k],xnon[k]]+=1
+                    for k in 1:Anon[i,j]
+                        Anon_new[Move(i,Ngrid,Δ),Move(j,Ngrid,Δ)]+=1
                     end
                 end
             end
 
-            Atox=Atox_new
-            Anon=Anon_new
+            Atox.=Atox_new
+            Anon.=Anon_new
 
             ### Diffuse nutrients
-            Cnew=convn(C,kernel_2D)
-            Cnew[:,2] = Cnew[:,2] .+ Cnew[:,end]
-            Cnew[:,end-1] = Cnew[:,end-1] .+ Cnew[:,1]
-            Cnew[2,:] = Cnew[2,:] .+ Cnew[end,:]
-            Cnew[end-1,:] = Cnew[end-1,:] .+ Cnew[1,:]
-            C=Cnew[2:end-1,2:end-1]
+            C=Diffusion(C,kernel_2D)
 
             ### Diffuse toxins
-            Tnew=convn(T,kernel_2D)
-            Tnew[:,2] = Tnew[:,2] .+ Tnew[:,end]
-            Tnew[:,end-1] = Tnew[:,end-1] .+ Tnew[:,1]
-            Tnew[2,:] = Tnew[2,:] .+ Tnew[end,:]
-            Tnew[end-1,:] = Tnew[end-1,:] .+ Tnew[1,:]
-            T=Tnew[2:end-1,2:end-1]
+            T=Diffusion(T,kernel_2D)
 
             # ## Plot
             # p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",
@@ -121,9 +122,8 @@ module IBM_Tox_Funct_PDE_Grid
             #     linecolor=[:steelblue :red],linewidth=2,guidefontsize=8)
             # pall=plot(p1,p2,p3,p4)
             # display(pall)
-
         end
-
+        
         return C, T, Atox, Anon, FreqTox, PopDens
     end
 

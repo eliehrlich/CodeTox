@@ -3,6 +3,7 @@ module IBM_Tox_Functions_PDE
     export Sim_Tox_Graz_PDE
 
     using FastConv
+    using StatsBase
     # using Plots
 
     function findall3(f, a::Array{Int64,1})
@@ -19,10 +20,24 @@ module IBM_Tox_Functions_PDE
         return b
     end
 
+    function Diffusion(X::Array{Float64,2},kernel_2D::Array{Float64,2})
+        Xnew=convn(X,kernel_2D)
+        Xnew[:,2] = Xnew[:,2] .+ Xnew[:,end]
+        Xnew[:,end-1] = Xnew[:,end-1] .+ Xnew[:,1]
+        Xnew[2,:] = Xnew[2,:] .+ Xnew[end,:]
+        Xnew[end-1,:] = Xnew[end-1,:] .+ Xnew[1,:]
+        X=Xnew[2:end-1,2:end-1]
+        return X
+    end
+
+    # function Move(xy::Array{Int64,1},Ngrid::Int64,Δ::Float64)
+    #     mod.(round.(Int, xy.-1 .+ randn(length(xy)) .* Δ),Ngrid) .+ 1
+    # end
+
     function RealReprod(PotBirth::BitArray{1},MaxNBirth::Int64)
         NPotBirth=length(PotBirth)
         NoBirth=maximum([0,NPotBirth-MaxNBirth]) # Number of potential births not realized
-        IndexNoBirth=rand(1:NPotBirth,NoBirth)
+        IndexNoBirth=sample(1:NPotBirth,NoBirth,replace=false)
         PotBirth[IndexNoBirth].=false   # Realized birth
 
         return PotBirth
@@ -33,7 +48,7 @@ module IBM_Tox_Functions_PDE
                         Ngrid::Int64,Nt::Int64,λ::Float64,Q::Float64,Ptox::Float64,Pnon::Float64,mtox::Float64,
                         mnon::Float64,Gtox::Float64,Gnon::Float64,HC::Float64,HT::Float64,
                         qN::Float64,dt::Float64,kernel_2D::Array{Float64,2},Δ::Float64)
-        for t in 1:Nt
+        @inbounds for t in 1:Nt
             ## 1. Birth and death of cells
             PosTox=@. (ytox-1)*Ngrid+xtox         # Linear index - position of toxic cells
             PosNon=@. (ynon-1)*Ngrid+xnon         # Linear index - position of non-toxic cells
@@ -47,9 +62,10 @@ module IBM_Tox_Functions_PDE
             ### Birth
             rv=rand(length(Pos))
             CellsReprod=rv.<=p
-            IndexReprodTrue=findall(x -> x == true, CellsReprod) # Indices of array CellsReprod at which =true
+            IndexReprodTrue=(1:length(CellsReprod))[CellsReprod]
+            # IndexReprodTrue=findall(CellsReprod) # Indices of array CellsReprod at which =true
             AllPos=unique(Pos[IndexReprodTrue]) # All positions at which potential birth
-            for i in AllPos
+            Threads.@threads for i in AllPos
                 MaxNBirth=floor(Int,C[i]/qN)
                 Ind_i=findall3(x -> (x == i), Pos[IndexReprodTrue])
                 IndexReprodTrue_i=IndexReprodTrue[Ind_i]
@@ -86,49 +102,44 @@ module IBM_Tox_Functions_PDE
             ## 2. Consumption and recycling of Nutrients
             ### Consume Nutrients
             PosBirth=(vcat(ytox_birth,ynon_birth).-1).*Ngrid.+vcat(xtox_birth,xnon_birth)   # Linear index - position of new born cells
-            for i in PosBirth
+            @inbounds for i in PosBirth
                 C[i]=C[i]-qN
             end
 
             ### Recycle Nutrients
             PosDeath=(vcat(ytox_dead,ynon_dead).-1).*Ngrid.+vcat(xtox_dead,xnon_dead)   # Linear index - position of dead cells
-            for i in PosDeath
+            @inbounds for i in PosDeath
                 C[i]=C[i]+qN
             end
-
 
             ## 3. Toxin leakage and decay
             PosTox=@. (ytox-1)*Ngrid+xtox
             T_decay=λ.*dt.*T
             ### Leak toxins
-            for i in PosTox
+            @inbounds for i in PosTox
                 T[i]=T[i]+Q*dt
             end
             ### Decay toxins
-            T=T.-T_decay
+            T.=T.-T_decay
 
             ## 4. Movement/Diffusion of cells, nutrients and toxins
             ### Move cells
+            # xtox = Move(xtox,Ngrid,Δ)
+            # ytox = Move(ytox,Ngrid,Δ)
+            # xnon = Move(xnon,Ngrid,Δ)
+            # ynon = Move(ynon,Ngrid,Δ)
+
             xtox = mod.(round.(Int, xtox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
             ytox = mod.(round.(Int, ytox.-1 .+ randn(length(xtox)) .* Δ),Ngrid) .+ 1
             xnon = mod.(round.(Int, xnon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
             ynon = mod.(round.(Int, ynon.-1 .+ randn(length(xnon)) .* Δ),Ngrid) .+ 1
 
+
             ### Diffuse nutrients
-            Cnew=convn(C,kernel_2D)
-            Cnew[:,2] = Cnew[:,2] .+ Cnew[:,end]
-            Cnew[:,end-1] = Cnew[:,end-1] .+ Cnew[:,1]
-            Cnew[2,:] = Cnew[2,:] .+ Cnew[end,:]
-            Cnew[end-1,:] = Cnew[end-1,:] .+ Cnew[1,:]
-            C=Cnew[2:end-1,2:end-1]
+            C=Diffusion(C,kernel_2D)
 
             ### Diffuse toxins
-            Tnew=convn(T,kernel_2D)
-            Tnew[:,2] = Tnew[:,2] .+ Tnew[:,end]
-            Tnew[:,end-1] = Tnew[:,end-1] .+ Tnew[:,1]
-            Tnew[2,:] = Tnew[2,:] .+ Tnew[end,:]
-            Tnew[end-1,:] = Tnew[end-1,:] .+ Tnew[1,:]
-            T=Tnew[2:end-1,2:end-1]
+            T=Diffusion(T,kernel_2D)
 
             # ## Plot
             # p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",
