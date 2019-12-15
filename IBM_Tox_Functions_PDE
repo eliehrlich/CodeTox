@@ -4,21 +4,8 @@ module IBM_Tox_Functions_PDE
 
     using FastConv
     using StatsBase
+    using Random
     # using Plots
-
-    function findall3(f, a::Array{Int64,1})
-        j = 1
-        b = Vector{Int}(undef, length(a))
-        @inbounds for i in eachindex(a)
-            @inbounds if f(a[i])
-                b[j] = i
-                j += 1
-            end
-        end
-        resize!(b, j-1)
-        sizehint!(b, length(b))
-        return b
-    end
 
     function Diffusion(X::Array{Float64,2},kernel_2D::Array{Float64,2})
         Xnew=convn(X,kernel_2D)
@@ -37,22 +24,7 @@ module IBM_Tox_Functions_PDE
     function BirthDeathDice(prob::Array{Float64,1})
         rv=rand(length(prob))
         rv.<=prob
-        # event=rv.<=prob
-        # findall(event)
     end
-
-    function RealReprod(PotBirth::BitArray{1},MaxNBirth::Int64)
-        NPotBirth=length(PotBirth)
-        NoBirth=NPotBirth-MaxNBirth # Number of potential births not realized
-        IndexNoBirth=sample(1:NPotBirth,NoBirth,replace=false)
-        PotBirth[IndexNoBirth].=false   # Realized birth
-
-        return PotBirth
-    end
-
-    # function RealReprod(CellReprod::Array{Int64,1},MaxNBirth::Int64)
-    #     sample(CellReprod,MaxNBirth,replace=false)
-    # end
 
     function LinIndex(x::Array{Int64,1},y::Array{Int64,1},Ngrid::Int64)
         @. (y-1)*Ngrid+x
@@ -74,32 +46,34 @@ module IBM_Tox_Functions_PDE
             gtox=@. Gtox*(1.0-T[PosTox]/(HT+T[PosTox]))
             gnon=@. Gnon*(1.0-T[PosNon]/(HT+T[PosNon]))
 
+            x=vcat(xtox,xnon)
+            y=vcat(ytox,ynon)
+
             ### Birth
             CellsReprod=BirthDeathDice(p)
-            IndexReprodTrue=(1:length(CellsReprod))[CellsReprod]
-            # IndexReprodTrue=findall(CellsReprod) # Indices of array CellsReprod at which =true
-            AllPos=unique(Pos[IndexReprodTrue]) # All positions at which potential birth
+            IndexReprod=(1:length(CellsReprod))[CellsReprod]
+            shuffle!(IndexReprod) # random order
+            xtox_birth=zeros(Int64,0) # initialize empty Array
+            ytox_birth=zeros(Int64,0)
+            xnon_birth=zeros(Int64,0)
+            ynon_birth=zeros(Int64,0)
             # Threads.@threads
-            for i in AllPos
-                MaxNBirth=floor(Int,C[i]/qN)
-                Ind_i=findall3(x -> (x == i), Pos[IndexReprodTrue])
-                IndexReprodTrue_i=IndexReprodTrue[Ind_i]
-                # IndexReprodTrue_i=[j for j in IndexReprodTrue if Pos[j]==i] # for an explanation see 'array comprehension'
-                if length(IndexReprodTrue_i) > MaxNBirth # Correcting number of birth when exceeding the max. number of birth determined by the nutrient concentration
-                    CellsReprod[IndexReprodTrue_i]=RealReprod(CellsReprod[IndexReprodTrue_i],MaxNBirth)
+            for i in IndexReprod
+                if C[x[i],y[i]]>=qN
+                    if i <= length(xtox)
+                        push!(xtox_birth,x[i])
+                        push!(ytox_birth,y[i])
+                    else
+                        push!(xnon_birth,x[i])
+                        push!(ynon_birth,y[i])
+                    end
+                    C[x[i],y[i]] -= qN
                 end
             end
-            CellsReprodTox=CellsReprod[1:length(PosTox)]
-            CellsReprodNon=CellsReprod[length(PosTox)+1:end]
-            xtox_birth=xtox[CellsReprodTox]
-            ytox_birth=ytox[CellsReprodTox]
-            xnon_birth=xnon[CellsReprodNon]
-            ynon_birth=ynon[CellsReprodNon]
 
             ### Death
             CellsDeadTox=BirthDeathDice(mtox.+gtox)                # Indices of dying cells (marked with 'true')
             CellsDeadNon=BirthDeathDice(mnon.+gnon)
-
             xtox_dead=xtox[CellsDeadTox]
             ytox_dead=ytox[CellsDeadTox]
             xnon_dead=xnon[CellsDeadNon]
@@ -114,21 +88,13 @@ module IBM_Tox_Functions_PDE
             FreqTox[t+1]=length(xtox)/(length(xtox)+length(xnon))
             PopDens[t+1,:]=[length(xnon),length(xtox)]
 
-            ## 2. Consumption and recycling of Nutrients
-            ### Consume Nutrients
-            PosBirth=LinIndex(vcat(xtox_birth,xnon_birth),vcat(ytox_birth,ynon_birth),Ngrid)   # Linear index - position of new born cells
-            @inbounds for i in PosBirth
-                C[i]=C[i]-qN
-            end
-
-            ### Recycle Nutrients
+            ## 2. Recycling of Nutrients
             PosDeath=LinIndex(vcat(xtox_dead,xnon_dead),vcat(ytox_dead,ynon_dead),Ngrid)   # Linear index - position of new born cells
             @inbounds for i in PosDeath
                 C[i]=C[i]+qN
             end
 
             ## 3. Toxin leakage and decay
-            # PosTox=@. (ytox-1)*Ngrid+xtox
             PosTox=LinIndex(xtox,ytox,Ngrid)
             T_decay=λ.*dt.*T
             ### Leak toxins
@@ -151,28 +117,11 @@ module IBM_Tox_Functions_PDE
             ### Diffuse toxins
             T=Diffusion(T,kernel_2D)
 
-            # ## Plot
-            # p1=scatter(xnon,ynon,xlabel="x [cm]",ylabel="y [cm]",
-            #     mc=:steelblue,msc=:black,ms=1.8,msw=0.0,
-            #     legend=false,reuse=false, #dpi=600)
-            #     xlims=(0,Ngrid),ylims=(0,Ngrid),title="t = $t",
-            #     guidefontsize=8,titlefontsize=10)
-            # scatter!(xtox,ytox,mc=:red,msc=:black,ms=1.8,msw=0.0)
-            # p2=heatmap(transpose(C),clims=(0,K),title="Nutrient conc.",titlefontsize=10)
-            # p3=heatmap(transpose(T),clims=(0,100),title="Toxin conc.",titlefontsize=10)
-            # p4=plot(0:dt:t*dt,PopDens[1:(t+1),:],reuse=false,legend=false,xlabel="t [days]",ylabel="Abundance",
-            #     xlims=(0,Nt*dt),ylim=(10^1,10^6),yaxis=:log,
-            #     linecolor=[:steelblue :red],linewidth=2,guidefontsize=8)
-            # pall=plot(p1,p2,p3,p4)
-            # display(pall)
-
         end
 
         return C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens
     end
 end #module
-
-
 
 
 # ### Diffuse columns

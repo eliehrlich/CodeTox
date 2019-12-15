@@ -1,0 +1,110 @@
+#using PyPlot
+using Plots
+using ColorSchemes
+using SpecialFunctions
+using Measures
+
+solar = ColorSchemes.solar
+
+n = 201
+# x = range(-0.1, 0.1, length=n)
+# y = range(-0.1, 0.1, length=n)
+x = range(-10, 10, length=n)
+y = range(-10, 10, length=n)
+
+xgrid = repeat(x',n,1)
+ygrid = repeat(y,1,n)
+z = zeros(n,n)
+
+
+# Dcm=0.864 #cm^2 d^-1
+# D=Dcm*10^-4 # d^-1 --> on relative spatial axis (simulated: 100cmx100cm --> relative: 1x1 dimensionless)
+# D=0.864
+# Q=1   # fmol d^-1 --> femtomol per day
+# λ=0.2  # d^-1
+# G=0.04 # maximum grazing loss probability
+# HT=0.01 # Half-saturation constant
+# HTz=fill(HT,n,n)
+#
+# for i in 1:n
+#     for j in 1:n
+#         r=(x[i]^2+y[j]^2)^0.5
+#         z[i,j] = Q/(D*2*pi)*besselk(0,(λ/D)^0.5*(r+0.1))  # r+0.001 instead of only r --> because if r=0 --> z would go to infinity
+#         # z[i,j] = pdf(MvNormal([0.0; 0.0], [0.001^2 0.0; 0.0 0.001^2]),[x[i];y[j]]) # multivariate normal distribution MvNormal(eye(2))
+#     end
+# end
+#
+# g=G.*(1.0.-z./(HT.+z))
+#
+# # #surface( x, y, z, size=[800,480],camera=(50,50))
+# # p1=surface( x, y, z, size=[800,480],camera=(90,0),zlim=(0,2)) # in 2D
+# #
+# # p2=surface( x, y, g, size=[800,480],camera=(90,0),zlim=(0,G)) # in 2D
+# #
+# # pall=plot(p1,p2)
+# # plot!(margin=10mm)
+# #
+# # display(pall)
+#
+# #1D: y=0 --> index 101
+# p1=plot(x,z[:,101],ylim=(0,2))
+# p2=plot(x,g[:,101],ylim=(0,G))
+# plot!(x,fill(G/2,length(x)))
+#
+# pall=plot(p1,p2)
+#
+# display(pall)
+
+
+D=0.864
+Q=1   # fmol d^-1 --> femtomol per day
+λ=0.2  # d^-1
+G=0.04 # maximum grazing loss probability
+HT=0.01 # Half-saturation constant
+HTz=fill(HT,n,n)
+
+Q=range(0.1,10.1,step=0.5)
+r_GmaxHalf=zeros(length(Q))
+g0=zeros(length(Q))
+
+for k in 1:length(Q)
+    for i in 1:n
+        for j in 1:n
+            r=(x[i]^2+y[j]^2)^0.5
+            z[i,j] = Q[k]/(D*2*pi)*besselk(0,(λ/D)^0.5*(r+0.1))  # r+0.001 instead of only r --> because if r=0 --> z would go to infinity
+            # z[i,j] = pdf(MvNormal([0.0; 0.0], [0.001^2 0.0; 0.0 0.001^2]),[x[i];y[j]]) # multivariate normal distribution MvNormal(eye(2))
+        end
+    end
+
+    g=G.*(1.0.-z./(HT.+z))
+
+    Diff=abs.(g[:,101].-G/2)
+    r_GmaxHalf[k]=101-findall(x->x==minimum(Diff),Diff)[1] #measure of public good
+    g0[k]=g[101,101]
+end
+
+p1=plot(Q,(G .- g0),ylim=(0.034,0.047))
+p2=plot(Q,r_GmaxHalf./10)
+pall=plot(p1,p2)
+
+display(pall)
+
+
+
+
+
+# fig = PyPlot.figure(figsize=(10,10))
+# ax = fig[:add_subplot](1,1,1, projection = "3d")
+# Surfi=ax[:plot_surface](xgrid,ygrid,z)
+#
+# savefig('D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\MVNormal')
+
+#PyPlot.show()
+
+# fig = PyPlot.figure("pyplot_surfaceplot",figsize=(10,10))
+# ax = fig[:add_subplot](2,1,1, projection = "3d")
+# ax[:plot_surface](xgrid, ygrid, z, rstride=2,edgecolors="k",
+#     cstride=2,
+#     cmap=ColorMap(solar),
+#     alpha=0.8,
+#     linewidth=0.25)

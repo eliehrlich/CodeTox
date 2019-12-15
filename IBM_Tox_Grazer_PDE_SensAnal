@@ -7,152 +7,153 @@
 using Plots
 using Colors
 using Random
-using Statistics
 #using DSP
 using FastConv # manually modified package by replacing "conv2" with "conv" in elseif-clause, and adding "using DSP"
-using DelimitedFiles
-using Measures
+using BenchmarkTools
+using Distributed
+using Statistics
 
 include("./IBM_Tox_Functions_PDE")
 using .IBM_Tox_Functions_PDE
 
-# Parameters
-## Resolution: Time step [days], grid cell size [cm]
-dt=0.1 #0.02
-dx=1   #0.5
+# Random.seed!(1234)
 
-## Space width [cm] and simulation time [days]
-L=100
-tmax=1000
+function LoopInitSimPlot()
+    # Parameters
+    ## Resolution: Time step [days], grid cell size [cm]
+    dt=0.2 #0.02
+    dx=1   #0.5
 
-## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
-Ngrid=ceil(Int, L/dx)
-Nnon=1000
-Ntox=100
-Nt=ceil(Int, tmax/dt)
+    ## Space width [cm] and simulation time [days]
+    L=50
+    tmax=100
 
-## Carrying capacity of nutrients [µmol ml^-1]
-K=64  #0.01*dx^2 #64
+    ## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
+    Ngrid=ceil(Int, L/dx)
+    Nnon=1000
+    Ntox=100
+    Nt=ceil(Int, tmax/dt)
 
-## Replenishing rate of nutrients [d^-1], decay rate of toxins [d^-1], toxin leakage rate [1 fmol d^-1]
-δ=1
-λ=0.2
-Q=1
+    ## Initial, spatially averaged nutrient concentration [nmol ml^-1]
+    K=0.1*dx^2  #0.01*dx^2
 
-## Max. growth rate, natural mortality rate, max. grazing (loss) rate [d^-1]
-rtox=0.38
-rnon=0.40
-dtox=0.1
-dnon=0.1
-atox=0.22
-anon=0.22
+    ## Decay rate of toxins [d^-1], toxin leakage rate [1 fmol d^-1]
+    λ=0.2
+    # Q=1.0
 
-## Max. birth probabilities, natural death probability and maximum graz. mortality probability
-Ptox=exp(rtox*dt)-1     #0.45
-Pnon=exp(rnon*dt)-1     #0.5
-mtox=-exp(-dtox*dt)+1   #0.15
-mnon=-exp(-dnon*dt)+1   #0.15
-Gtox=-exp(-atox*dt)+1   #0.2
-Gnon=-exp(-anon*dt)+1   #0.2
+    ## Max. growth rate, natural mortality rate, max. grazing (loss) rate [d^-1]
+    rtox=0.38
+    rnon=0.40
+    dtox=0.15
+    dnon=0.15
+    atox=0.2
+    anon=0.2
 
-## Half-saturation constants for nutrients [µmol dx^-2] and toxin effect [fmol dx^-2]
-HC=5    # 0.005*dx^2    # 5 µmol N l^-1 --> 0.005 µmol N ml^-1 --> 0.005 µmol N cm^-2
-HT=0.1
+    ## Max. birth probabilities, natural death probability and maximum graz. mortality probability
+    Ptox=exp(rtox*dt)-1     #0.45
+    Pnon=exp(rnon*dt)-1     #0.5
+    mtox=-exp(-dtox*dt)+1   #0.15
+    mnon=-exp(-dnon*dt)+1   #0.15
+    Gtox=-exp(-atox*dt)+1   #0.2
+    Gnon=-exp(-anon*dt)+1   #0.2
 
-## Maximum nutrient uptake rate [µmol cell^-1 d^-1]
-vmax=2*10^-4
+    ## Half-saturation constants for nutrients [nmol dx^-2] and toxin effect [fmol dx^-2]
+    # HC=K/5
+    HT=0.1*dx^2
 
-## Diffusivity of nutrients, toxins and cells [cm^2 d^-1]
-Dn=0.864
-Dc=8.640
+    ## Cell quota [nmol N cell^-1]
+    qN=0.01
 
-## Diffusion kernel (1 or 2 dimension). Warning! Dn/dx/dx*dt must be <1/3
-α=Dn/dx/dx*dt
-if α>1/3
-    error("Time step to large")
-end
-kernel=α*[1,-2,1] + [0,1,0]
+    ## Diffusivity of nutrients, toxins and cells [cm^2 d^-1]
+    Dn=0.864
+    Dc=8.640
 
-kernel_2D=zeros(3,3)
-kernel_2D[2,:]=kernel
-for i in 1:3
-    k2D = convn(kernel_2D[:,i],kernel) # convn is from Package FastConv
-    kernel_2D[:,i]=k2D[2:end-1]
-end
+    ## Average diffusion distance of cells [units: dx=number of grid cells] per time step dt
+    Δ=sqrt(2*Dc*dt)/dx
 
-## Average diffusion distance of cells [units: dx=number of grid cells] per time step dt
-Δ=sqrt(2*Dc*dt)/dx
+    ## Diffusion kernel (1 or 2 dimension). Warning! Dn/dx/dx*dt must be <1/3
+    α=Dn/dx/dx*dt
 
-# Parameter loop
-Nparval=10
-Nrepl=5
-Vec_rtox=LinRange(0.31, 0.4, Nparval)
-Vec_HT=LinRange(0.05,0.5,Nparval)
-Vec_HC=LinRange(1,10,Nparval)
-Vec_amax=LinRange(0.18,0.38,Nparval)
+    if α>1/3
+        error("Time step to large")
+    end
+    kernel=α*[1,-2,1] + [0,1,0]
 
-## Mean population densities and rel. frequency at tmax and corresponding standard deviation
-MeanPopDens=zeros(Nparval,2)
-SDPopDens=zeros(Nparval,2)
-MeanFreqTox=zeros(Nparval)
-SDFreqTox=zeros(Nparval)
-
-for i in 1:Nparval
-    # rtox=Vec_rtox[i]
-    # Ptox=exp(rtox*dt)-1
-    # HT=Vec_HT[i]
-    # HC=Vec_HC[i]
-    amax=Vec_amax[i]
-    Gtox=-exp(-amax*dt)+1   #0.2
-    Gnon=-exp(-amax*dt)+1   #0.2
-
-
-    ## Population densities at tmax
-    PopDensRepl=zeros(Nrepl,2)
-    FreqToxRepl=zeros(Nrepl)
-
-    ## Replicate loop
-    for j in 1:Nrepl
-        ### Initialization of nutrient conc., toxin conc. and cell positions
-        C=K*rand(Ngrid,Ngrid)
-        T=zeros(Ngrid,Ngrid)
-
-        xnon=ceil.(Int,rand(Nnon)*Ngrid)
-        ynon=ceil.(Int,rand(Nnon)*Ngrid)
-        xtox=ceil.(Int,rand(Ntox)*Ngrid)
-        ytox=ceil.(Int,rand(Ntox)*Ngrid)
-
-        FreqTox=zeros(Nt+1)                 # Frequency of toxic cells
-        FreqTox[1]=Ntox/(Ntox+Nnon)         # Initial frequency of toxic cells
-        PopDens=zeros(Nt+1,2)               # Population density of non-toxic and toxic cells
-        PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
-
-        ### Run simulation
-        @time C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,K,δ,λ,Q,
-                                                                    Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,vmax,dt,kernel,kernel_2D,Δ)
-        PopDensRepl[j,:]=PopDens[end,:]
-        FreqToxRepl[j]=PopDensRepl[j,2]/sum(PopDensRepl[j,:])
+    kernel_2D=zeros(3,3)
+    kernel_2D[2,:]=kernel
+    for i in 1:3
+        k2D = convn(kernel_2D[:,i],kernel) # convn is from Package FastConv
+        kernel_2D[:,i]=k2D[2:end-1]
     end
 
-    MeanPopDens[i,:]=mean(PopDensRepl,dims=1)
-    SDPopDens[i,:]=std(PopDensRepl,dims=1)
-    MeanFreqTox[i]=mean(FreqToxRepl)
-    SDFreqTox[i]=std(FreqToxRepl)
+    # Parameter loop
+    Nparval=2
+    Nrepl=1
+    Vec_Q=LinRange(0,10,Nparval)
+    Vec_HC=LinRange(0,10,Nparval)
+    Comb_Q_HC=collect(Base.product(Vec_Q,Vec_HC))
+
+    ## Mean population densities and rel. frequency at tmax and corresponding standard deviation
+    MeanPopDens=zeros(length(Comb_Q_HC),2)
+    SDPopDens=zeros(length(Comb_Q_HC),2)
+    MeanFreqTox=zeros(length(Comb_Q_HC))
+    SDFreqTox=zeros(length(Comb_Q_HC))
+
+    for i in 1:Nparval^2
+        Q=Comb_Q_HC[i][1]
+        HC=Comb_Q_HC[i][2]
+
+        ## Population densities at tmax
+        PopDensRepl=zeros(Nrepl,2)
+        FreqToxRepl=zeros(Nrepl)
+
+        ## Replicate loop
+        for j in 1:Nrepl
+            # Initialization of nutrient conc., toxin conc. and cell positions
+            C=fill(K,Ngrid,Ngrid)#2*K*rand(Ngrid,Ngrid)
+            T=zeros(Ngrid,Ngrid)
+
+            xnon=ceil.(Int,rand(Nnon)*Ngrid)
+            ynon=ceil.(Int,rand(Nnon)*Ngrid)
+            xtox=ceil.(Int,rand(Ntox)*Ngrid)
+            ytox=ceil.(Int,rand(Ntox)*Ngrid)
+
+            FreqTox=zeros(Nt+1)                 # Frequency of toxic cells
+            FreqTox[1]=Ntox/(Ntox+Nnon)         # Initial frequency of toxic cells
+            PopDens=zeros(Nt+1,2)               # Population density of non-toxic and toxic cells
+            PopDens[1,:]=[Nnon,Ntox]            # Initial population densities
+
+            # Run simulation
+            @time C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = IBM_Tox_Functions_PDE.Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,λ,Q,
+                                                                        Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
+
+            PopDensRepl[j,:]=PopDens[end,:]
+            FreqToxRepl[j]=PopDensRepl[j,2]/sum(PopDensRepl[j,:])
+        end
+
+        MeanPopDens[i,:]=mean(PopDensRepl,dims=1)
+        SDPopDens[i,:]=std(PopDensRepl,dims=1)
+        MeanFreqTox[i]=mean(FreqToxRepl)
+        SDFreqTox[i]=std(FreqToxRepl)
+    end
+    println(MeanPopDens)
 end
 
-writedlm("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Data\\gmax_Mean&SD_Dens&Freq.csv",
-    hcat(Vec_amax,MeanPopDens,SDPopDens,MeanFreqTox,SDFreqTox), ',')
-# Res=readdlm("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Data\\HT_Mean&SD_Dens&Freq.csv", ',', Float64)
+LoopInitSimPlot()
 
-# Plot
-p1=scatter(Vec_amax,MeanPopDens,reuse=false,legend=false,xlabel="\$ g_{max} [d^{-1}] \$",ylabel="Mean abundance",
-    ylim=(10^1,10^5),yaxis=:log,yerror=SDPopDens,
-    linecolor=[:steelblue :red],linewidth=2,guidefontsize=12)
-p2=scatter(Vec_amax,MeanFreqTox,reuse=false,legend=false,xlabel="\$ g_{max} [d^{-1}] \$",ylabel="Mean relative frequency of toxic cells",
-    ylim=(0,1),yerror=SDFreqTox,markercolor = [:black],
-    linecolor=[:black],linewidth=2,guidefontsize=12)
-pall=plot(p1,p2)
-plot!(size=(800,400), margin=10mm, title="t = $tmax d")
-display(pall)
+# writedlm("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Data\\gmax_Mean&SD_Dens&Freq.csv",
+#     hcat(Vec_amax,MeanPopDens,SDPopDens,MeanFreqTox,SDFreqTox), ',')
+# # Res=readdlm("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Data\\HT_Mean&SD_Dens&Freq.csv", ',', Float64)
+#
+# # Plot
+# p1=scatter(Vec_amax,MeanPopDens,reuse=false,legend=false,xlabel="\$ g_{max} [d^{-1}] \$",ylabel="Mean abundance",
+#     ylim=(10^1,10^5),yaxis=:log,yerror=SDPopDens,
+#     linecolor=[:steelblue :red],linewidth=2,guidefontsize=12)
+# p2=scatter(Vec_amax,MeanFreqTox,reuse=false,legend=false,xlabel="\$ g_{max} [d^{-1}] \$",ylabel="Mean relative frequency of toxic cells",
+#     ylim=(0,1),yerror=SDFreqTox,markercolor = [:black],
+#     linecolor=[:black],linewidth=2,guidefontsize=12)
+# pall=plot(p1,p2)
+# plot!(size=(800,400), margin=10mm, title="t = $tmax d")
+# display(pall)
 
-savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\Tox_Grazer\\SensAna_gmax")
+# savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\Tox_Grazer\\SensAna_gmax")

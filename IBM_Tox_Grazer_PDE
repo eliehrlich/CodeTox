@@ -15,64 +15,64 @@ using Distributed
 include("./IBM_Tox_Functions_PDE")
 using .IBM_Tox_Functions_PDE
 
-Random.seed!(1234)
-
-# Parameters
-## Resolution: Time step [days], grid cell size [cm]
-const dt=0.2 #0.02
-const dx=1   #0.5
-
-## Space width [cm] and simulation time [days]
-const L=50
-const tmax=25
-
-## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
-const Ngrid=ceil(Int, L/dx)
-const Nnon=1000
-const Ntox=100
-const Nt=ceil(Int, tmax/dt)
-
-## Initial, spatially averaged nutrient concentration [nmol ml^-1]
-const K=0.1*dx^2  #0.01*dx^2
-
-## Decay rate of toxins [d^-1], toxin leakage rate [1 fmol d^-1]
-const λ=0.2
-const Q=1.0
-
-## Max. growth rate, natural mortality rate, max. grazing (loss) rate [d^-1]
-const rtox=0.38
-const rnon=0.40
-const dtox=0.15
-const dnon=0.15
-const atox=0.2
-const anon=0.2
-
-## Max. birth probabilities, natural death probability and maximum graz. mortality probability
-const Ptox=exp(rtox*dt)-1     #0.45
-const Pnon=exp(rnon*dt)-1     #0.5
-const mtox=-exp(-dtox*dt)+1   #0.15
-const mnon=-exp(-dnon*dt)+1   #0.15
-const Gtox=-exp(-atox*dt)+1   #0.2
-const Gnon=-exp(-anon*dt)+1   #0.2
-
-## Half-saturation constants for nutrients [nmol dx^-2] and toxin effect [fmol dx^-2]
-const HC=K/5
-const HT=0.1*dx^2
-
-## Cell quota [nmol N cell^-1]
-const qN=0.01
-
-## Diffusivity of nutrients, toxins and cells [cm^2 d^-1]
-const Dn=0.864
-const Dc=8.640
-
-## Average diffusion distance of cells [units: dx=number of grid cells] per time step dt
-const Δ=sqrt(2*Dc*dt)/dx
-
-## Diffusion kernel (1 or 2 dimension). Warning! Dn/dx/dx*dt must be <1/3
-const α=Dn/dx/dx*dt
+# Random.seed!(1234)
 
 function InitSimPlot()
+    # Parameters
+    ## Resolution: Time step [days], grid cell size [cm]
+    dt=0.2 #0.02
+    dx=1   #0.5
+
+    ## Space width [cm] and simulation time [days]
+    L=50
+    tmax=100
+
+    ## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
+    Ngrid=ceil(Int, L/dx)
+    Nnon=1000
+    Ntox=100
+    Nt=ceil(Int, tmax/dt)
+
+    ## Initial, spatially averaged nutrient concentration [nmol ml^-1]
+    K=0.05*dx^2  #0.01*dx^2
+
+    ## Decay rate of toxins [d^-1], toxin leakage rate [1 fmol d^-1]
+    λ=0.2
+    Q=2.0
+
+    ## Max. growth rate, natural mortality rate, max. grazing (loss) rate [d^-1]
+    rtox=0.38
+    rnon=0.40
+    dtox=0.15
+    dnon=0.15
+    atox=0.2
+    anon=0.2
+
+    ## Max. birth probabilities, natural death probability and maximum graz. mortality probability
+    Ptox=exp(rtox*dt)-1     #0.45
+    Pnon=exp(rnon*dt)-1     #0.5
+    mtox=-exp(-dtox*dt)+1   #0.15
+    mnon=-exp(-dnon*dt)+1   #0.15
+    Gtox=-exp(-atox*dt)+1   #0.2
+    Gnon=-exp(-anon*dt)+1   #0.2
+
+    ## Half-saturation constants for nutrients [nmol dx^-2] and toxin effect [fmol dx^-2]
+    HC=K/5
+    HT=0.2*dx^2
+
+    ## Cell quota [nmol N cell^-1]
+    qN=0.01
+
+    ## Diffusivity of nutrients, toxins and cells [cm^2 d^-1]
+    Dn=0.864
+    Dc=8.640
+
+    ## Average diffusion distance of cells [units: dx=number of grid cells] per time step dt
+    Δ=sqrt(2*Dc*dt)/dx
+
+    ## Diffusion kernel (1 or 2 dimension). Warning! Dn/dx/dx*dt must be <1/3
+    α=Dn/dx/dx*dt
+
     if α>1/3
         error("Time step to large")
     end
