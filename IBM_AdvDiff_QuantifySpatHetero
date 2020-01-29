@@ -1,0 +1,81 @@
+################################################################
+#                 Phytoplankton IBM                            #
+#               Author: Elias Ehrlich                          #
+#                 Date: 24/05/2019                             #
+################################################################
+## Packages
+using Plots
+using Colors
+using Distributions
+using Random
+using NearestNeighbors
+using Distances
+
+#Random.seed!(1234)
+
+## Parameters
+tmax=100     # simulation steps
+N0=20000     # initial number of cells
+# Δ=0.001      # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
+U=0.1        # maximum distance of turbulence movement (-> amplitude of turbulence movement wave)
+p=0.25       # birth probability
+q=0.25       # death probability
+
+Δ_values=0.0:0.0005:0.01
+R_values=zeros(length(Δ_values))
+
+function RunSim(A,Δ)
+    ## Simulation
+    for t in 1:tmax
+        # demography
+        rv=rand(size(A,1))                              # random variable for demography
+        CellsSurv=findall(x->x>q,rv)                    # row numbers of surviving cells
+        A=A[CellsSurv,:]                         # remove dead cells
+        CellsReprod=findall(x->x>(1-p),rv[CellsSurv])   # row number of reproducing cells
+        A=vcat(A,A[CellsReprod,:])               # add offsprings --> same position as parents
+
+        # diffusion
+        dx=rand(Normal(0,Δ),size(A,1))     # Gaussian distributed random variable for diffusion in x-direction (mean=0, sd=rms=Δ)
+        dy=rand(Normal(0,Δ),size(A,1))     # Gaussian distributed random variable for diffusion in y-direction (mean=0, sd=rms=Δ)
+        A[:,1]=mod.(A[:,1].+dx,1)          # modulo for torus
+        A[:,2]=mod.(A[:,2].+dy,1)          # modulo for torus
+
+        # # turbulence
+        # phi=rand()*2*pi                 # for turbulence in x-direction
+        # theta=rand()*2*pi               # for turbulence in y-direction
+        # ddx=U.*cos.(2*pi*A[:,2].+phi)   # distances for turbulence movement in x-direction
+        # A[:,1]=mod.(A[:,1].+ddx,1)
+        # ddy=U.*cos.(2*pi*A[:,1].+theta) # distances for turbulence movement in y-direction
+        # A[:,2]=mod.(A[:,2].+ddy,1)
+    end
+
+    return A
+end
+
+for i in 1:length(Δ_values)
+    Δ=Δ_values[i]
+
+    ## Initialization
+    A = rand(N0,2)   # cells --> random x- and y-positions between 0 and 1
+    A=hcat(A,A[:,2])        # add 3rd column --> initial y (origin)
+
+    A=RunSim(A,Δ)
+
+    # Quantify spatial heterogeneity
+    A_for_Tree=transpose(A[:,1:2])
+    k=2             # how many nearest neighbors
+    pred=PeriodicEuclidean([1.0,1.0])   # instead of Euclidean distance use PeriodicEuclidean for periodic boundary conditions
+    @time balltree=BallTree(A_for_Tree,pred)    # create a tree
+    @time idxs, dists = knn(balltree,A_for_Tree, k, true)
+    #  @time idxs = inrange(balltree, A_for_Tree, 0.1, true) # Index of all neighbors in a certain range (e.g. distance [0,0.001])
+    dists=hcat(dists...)
+    dists=dists[2,:] # take the second nearest neighbor, as the nearest is the cell itself
+    mean_dists=mean(dists)
+    expect_dists_rand=0.5/sqrt(size(A,1))
+
+    # Clark-Evans Index
+    R_values[i]=mean_dists/expect_dists_rand
+end
+
+plot(Δ_values,R_values)
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\IBM_AdvDiff_t$tmax")

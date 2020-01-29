@@ -1,6 +1,7 @@
 module IBM_Tox_Functions_PDE
 
     export Sim_Tox_Graz_PDE
+    export Sim_Tox_Graz_PDE1
 
     using FastConv
     using StatsBase
@@ -31,7 +32,7 @@ module IBM_Tox_Functions_PDE
     end
 
     function Sim_Tox_Graz_PDE(C::Array{Float64,2},T::Array{Float64,2},xnon::Array{Int64,1},ynon::Array{Int64,1},
-                        xtox::Array{Int64,1},ytox::Array{Int64,1},FreqTox::Array{Float64,1},PopDens ::Array{Float64,2},
+                        xtox::Array{Int64,1},ytox::Array{Int64,1},FreqTox::Array{Float64,1},PopDens ::Array{Int64,2},
                         Ngrid::Int64,Nt::Int64,λ::Float64,Q::Float64,Ptox::Float64,Pnon::Float64,mtox::Float64,
                         mnon::Float64,Gtox::Float64,Gnon::Float64,HC::Float64,HT::Float64,
                         qN::Float64,dt::Float64,kernel_2D::Array{Float64,2},Δ::Float64)
@@ -39,17 +40,16 @@ module IBM_Tox_Functions_PDE
             ## 1. Birth and death of cells
             PosTox=LinIndex(xtox,ytox,Ngrid)
             PosNon=LinIndex(xnon,ynon,Ngrid)
-            Pos=vcat(PosTox,PosNon)
             ptox=@. Ptox*C[PosTox]/(HC+C[PosTox])
             pnon=@. Pnon*C[PosNon]/(HC+C[PosNon])
-            p=vcat(ptox,pnon)
             gtox=@. Gtox*(1.0-T[PosTox]/(HT+T[PosTox]))
             gnon=@. Gnon*(1.0-T[PosNon]/(HT+T[PosNon]))
 
+            ### Birth
             x=vcat(xtox,xnon)
             y=vcat(ytox,ynon)
+            p=vcat(ptox,pnon)
 
-            ### Birth
             CellsReprod=BirthDeathDice(p)
             IndexReprod=(1:length(CellsReprod))[CellsReprod]
             shuffle!(IndexReprod) # random order
@@ -58,7 +58,7 @@ module IBM_Tox_Functions_PDE
             xnon_birth=zeros(Int64,0)
             ynon_birth=zeros(Int64,0)
             # Threads.@threads
-            for i in IndexReprod
+            @inbounds for i in IndexReprod
                 if C[x[i],y[i]]>=qN
                     if i <= length(xtox)
                         push!(xtox_birth,x[i])
@@ -90,16 +90,18 @@ module IBM_Tox_Functions_PDE
 
             ## 2. Recycling of Nutrients
             PosDeath=LinIndex(vcat(xtox_dead,xnon_dead),vcat(ytox_dead,ynon_dead),Ngrid)   # Linear index - position of new born cells
-            @inbounds for i in PosDeath
-                C[i]=C[i]+qN
-            end
+            # @inbounds for i in PosDeath
+            #     C[i] += qN
+            # end
+            RecyclN_perPatch=length(PosDeath)/length(C)*qN
+            C.=C.+RecyclN_perPatch
 
             ## 3. Toxin leakage and decay
             PosTox=LinIndex(xtox,ytox,Ngrid)
             T_decay=λ.*dt.*T
             ### Leak toxins
             @inbounds for i in PosTox
-                T[i]=T[i]+Q*dt
+                T[i] += Q*dt
             end
             ### Decay toxins
             T.=T.-T_decay

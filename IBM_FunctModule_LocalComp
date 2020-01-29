@@ -1,0 +1,97 @@
+module IBM_FunctModule_LocalComp
+
+    export ToxGrazerLocalComp
+
+    using Distributions
+
+    function LinIndex(A::Array{Int64,2},Ngrid::Int64)
+        @. (A[:,2]-1)*Ngrid+A[:,1]
+    end
+
+    function BirthDeathDice(prob::Array{Float64,1})
+        rv=rand(length(prob))
+        rv.<=prob
+    end
+
+    function Move(xy::Array{Int64,1},Ngrid::Int64,Δ_c::Float64)
+        mod.(round.(Int, xy.-1 .+ randn(length(xy)) .* Δ_c),Ngrid) .+ 1
+    end
+
+    function ToxGrazerLocalComp(Atox,Anon,LocalTox,LocalComp,Ngrid,Δ_c,U,Ptox,Pnon,mtox,mnon,Gtox,Gnon,HT,HC,nT,nC)
+        ## birth, death and grazing loss
+        # Calculate toxicity environment
+        GlobalTox=zeros(Ngrid,Ngrid)                # global toxicity environment (whole space)
+        GlobalComp=zeros(Ngrid,Ngrid)               # global competition environment (whole space)
+        for i in 1:size(Atox,1)                 # loop through all toxic cells
+            xrange=Atox[i,1]-nT:Atox[i,1]+nT
+            xrange=@. mod(xrange-1,Ngrid)+1
+            yrange=Atox[i,2]-nT:Atox[i,2]+nT
+            yrange=@. mod(yrange-1,Ngrid)+1
+            GlobalTox[xrange,yrange]=GlobalTox[xrange,yrange].+LocalTox # add toxicity effect of the considered cell
+
+            xrange=Atox[i,1]-nC:Atox[i,1]+nC
+            xrange=@. mod(xrange-1,Ngrid)+1
+            yrange=Atox[i,2]-nC:Atox[i,2]+nC
+            yrange=@. mod(yrange-1,Ngrid)+1
+            GlobalComp[xrange,yrange]=GlobalComp[xrange,yrange].+LocalComp # add competition effect of the considered cell
+        end
+
+        for i in 1:size(Anon,1)                   # loop through all non-toxic cells
+            xrange=Anon[i,1]-nC:Anon[i,1]+nC    # +1 as AC has values from 0 to 10000 --> corresponding to an index from 1 to 10001
+            xrange=@. mod(xrange-1,Ngrid)+1       # for torus, version without macro @. --> mod.(xrange.-1,L+1).+1
+            yrange=Anon[i,2]-nC:Anon[i,2]+nC
+            yrange=@. mod(yrange-1,Ngrid)+1
+            GlobalComp[xrange,yrange]=GlobalComp[xrange,yrange].+LocalComp # add competition effect of the considered cell
+        end
+
+        IndexTox=LinIndex(Atox,Ngrid) # one dimensional/linear index - position of toxic cells
+        IndexNon=LinIndex(Anon,Ngrid) # one dimensional index - position of non-toxic cells
+
+        gtox=@. Gtox*(1.0-GlobalTox[IndexTox]/(HT+GlobalTox[IndexTox]))     # ingestion probability of toxic cell
+        gnon=@. Gnon*(1.0-GlobalTox[IndexNon]/(HT+GlobalTox[IndexNon]))     # ingestion probability of non-toxic cell
+
+        ptox=@. Ptox*(1.0-GlobalComp[IndexTox]/(HC+GlobalComp[IndexTox]))      # resource-dependent birth probability of toxic cells
+        pnon=@. Pnon*(1.0-GlobalComp[IndexNon]/(HC+GlobalComp[IndexNon]))      # resource-dependent birth probability of non-toxic cells
+
+        # toxic cells
+        rv=rand(size(Atox,1))
+        CellsSurv=rv.>(mtox.+gtox)               # rows of surviving cells (marked with 'true')
+        Atox=Atox[CellsSurv,:]                       # remove dead cells
+        CellsReprod=rv[CellsSurv].>(1 .-ptox[CellsSurv])   # row number of reproducing cells
+        Atox=vcat(Atox,Atox[CellsReprod,:])          # add offsprings --> same position as parents
+        # non-toxic cells
+        rv=rand(size(Anon,1))
+        CellsSurv=rv.>(mnon.+gnon)                            # rows of surviving cells (marked with 'true')
+        Anon=Anon[CellsSurv,:]                       # remove dead cells
+        CellsReprod=rv[CellsSurv].>(1 .-pnon[CellsSurv])   # row number of reproducing cells
+        Anon=vcat(Anon,Anon[CellsReprod,:])          # add offsprings --> same position as parents
+
+        ## diffusion
+        # toxic cells
+        Atox[:,1]=Move(Atox[:,1],Ngrid,Δ_c)
+        Atox[:,2]=Move(Atox[:,2],Ngrid,Δ_c)
+        # non-toxic cells
+        Anon[:,1]=Move(Anon[:,1],Ngrid,Δ_c)
+        Anon[:,2]=Move(Anon[:,2],Ngrid,Δ_c)
+
+        # ## turbulence
+        # phi=rand()*2*pi     # for turbulence in x-direction
+        # theta=rand()*2*pi   # for turbulence in y-direction
+        # # toxic cells
+        # ddxTox=U.*cos.(2 .*pi.*Atox[:,2]./L .+phi) # movement in x-direction
+        # ddxTox=floor.(Int,ddxTox.*L)                # discretizing
+        # Atox[:,1]=mod.(Atox[:,1].+ddxC,L)
+        # ddyTox=U.*cos.(2 .*pi.*Atox[:,1]./L .+theta)
+        # ddyTox=floor.(Int,ddyTox.*L)                # discretizing
+        # Atox[:,2]=mod.(Atox[:,2].+ddyTox,L)
+        # # non-toxic cells
+        # ddxNon=U.*cos.(2 .*pi.*Anon[:,2]./L .+phi) # movement in x-direction
+        # ddxNon=floor.(Int,ddxNon.*L)                # discretizing
+        # Anon[:,1]=mod.(Anon[:,1].+ddxNon,L)
+        # ddyNon=U.*cos.(2 .*pi.*Anon[:,1]./L .+theta)
+        # ddyNon=floor.(Int,ddyNon.*L)                # discretizing
+        # Anon[:,2]=mod.(Anon[:,2].+ddyNon,L)
+
+        return Atox, Anon
+    end
+end #module
