@@ -16,13 +16,14 @@ using BenchmarkTools
 using Statistics
 using DelimitedFiles
 using Measures
+using StatsBase
 
 include("./IBM_Tox_Functions_PDE")
 using .IBM_Tox_Functions_PDE
 
 # Random.seed!(1234)
 
-function LoopInitSimPlot(SensPar::String)
+function LoopInitSimPlot(SensPar::String,SaveFile::Bool,SavePlot::Bool)
     # Parameters
     ## Resolution: Time step [days], grid cell size [cm]
     dt=0.25 #0.02
@@ -30,7 +31,7 @@ function LoopInitSimPlot(SensPar::String)
 
     ## Space width [cm] and simulation time [days]
     L=50
-    tmax=8000
+    tmax=100 #8000
 
     ## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
     Ngrid=ceil(Int, L/dx)
@@ -103,7 +104,7 @@ function LoopInitSimPlot(SensPar::String)
 
     # Parameter loop
     Nparval=8
-    Nrepl=4
+    Nrepl=2 #4
     Vec_Dc=[0.0001, 0.001, 0.01, 0.05, 0.1, 1, 10, 100]
     Vec_HT=@. LinRange(0.02,1.84,Nparval)*dx^2
     Vec_Q=LinRange(0,7/3,Nparval)
@@ -118,10 +119,10 @@ function LoopInitSimPlot(SensPar::String)
     SDPopDens=zeros(Nparval,2)
     MeanFreqTox=zeros(Nparval)
     SDFreqTox=zeros(Nparval)
-    MeanDistToTox=zeros(Nparval,2)
-    SDDistToTox=zeros(Nparval,2)
-    MeanCV=zeros(Nparval,2)
-    SDCV=zeros(Nparval,2)
+    MeanPatchiness=zeros(Nparval,2)
+    SDPatchiness=zeros(Nparval,2)
+    MeanNumToxNeigh=zeros(Nparval,2)
+    SDNumToxNeigh=zeros(Nparval,2)
 
     for i in 1:Nparval
         if SensPar=="Dc"
@@ -146,8 +147,8 @@ function LoopInitSimPlot(SensPar::String)
         ## Allocation of results arrays for replicates
         PopDensRepl=zeros(Nrepl,2)
         FreqToxRepl=zeros(Nrepl)
-        DistToToxRepl=zeros(Nrepl,2)
-        CV_Repl=zeros(Nrepl,2)
+        PatchinessRepl=zeros(Nrepl,2)
+        NumToxNeighRepl=zeros(Nrepl,2)
 
         ## Replicate loop
         for j in 1:Nrepl
@@ -170,37 +171,23 @@ function LoopInitSimPlot(SensPar::String)
             C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens = IBM_Tox_Functions_PDE.Sim_Tox_Graz_PDE(C,T,xnon,ynon,xtox,ytox,FreqTox,PopDens,Ngrid,Nt,λ,Q,
                                                                                 Ptox,Pnon,mtox,mnon,Gtox,Gnon,HC,HT,qN,dt,kernel_2D,Δ)
             # Quantifying spatial heterogeneity
-            xtox_Float=convert(Array{Float64},xtox)
-            ytox_Float=convert(Array{Float64},ytox)
-            xnon_Float=convert(Array{Float64},xnon)
-            ynon_Float=convert(Array{Float64},ynon)
-            CartTox=vcat(transpose(xtox_Float),transpose(ytox_Float))
-            CartNon=vcat(transpose(xnon_Float),transpose(ynon_Float))
-            k=2             # how many nearest neighbors
-            pred=PeriodicEuclidean([Ngrid,Ngrid])   # instead of Euclidean distance use PeriodicEuclidean for periodic boundary conditions
-
-            if size(CartTox,2)>1 && size(CartNon,2)>1
-                balltreeTox=BallTree(CartTox,pred)    # create a tree
-
-                idxsNonTox, distsNonTox = knn(balltreeTox,CartNon, k, true)
-                distsNonTox=hcat(distsNonTox...)
-                distsNonTox=distsNonTox[1,:] # take the nearest neighbor
-                DistToToxRepl[j,1]=mean(distsNonTox)
-
-                idxsTox, distsTox = knn(balltreeTox,CartTox, k, true)
-                distsTox=hcat(distsTox...)
-                distsTox=distsTox[2,:] # take the second nearest neighbor, the first is the cell itself
-                DistToToxRepl[j,2]=mean(distsTox)
-
-            end
-
-            # Calculate coefficient of spatial variation of cell concentration (=SD/Mean)
             NON=zeros(Int64,Ngrid,Ngrid) # for non-toxic cell concentrations
             TOX=zeros(Int64,Ngrid,Ngrid) # for toxic cell concentrations
             for k in 1:length(xnon); NON[xnon[k],ynon[k]]+=1; end
             for k in 1:length(xtox); TOX[xtox[k],ytox[k]]+=1; end
-            CV_Repl[j,1]=std(NON)/mean(NON)
-            CV_Repl[j,2]=std(TOX)/mean(TOX)
+            var_NON=var(NON)
+            mean_NON=mean(NON)
+            var_TOX=var(TOX)
+            mean_TOX=mean(TOX)
+            Covariance=cov(vec(NON),vec(TOX))
+
+            ## Lloyd's patchiness
+            PatchinessRepl[j,1]=1+(var_NON-mean_NON)/mean_NON^2
+            PatchinessRepl[j,2]=1+(var_TOX-mean_TOX)/mean_TOX^2
+
+            ## Number of toxic neighbors
+            NumToxNeighRepl[j,1]=Covariance/mean_NON+mean_TOX # for non-toxic cell
+            NumToxNeighRepl[j,2]=mean_TOX+(var_TOX/mean_TOX-1)
 
             PopDensRepl[j,:]=mean(PopDens[floor(Int64,size(PopDens,1)/2):end,:],dims=1) # take the mean densities from the last half of the simulations
             FreqToxRepl[j]=PopDensRepl[j,2]/sum(PopDensRepl[j,:])
@@ -211,10 +198,10 @@ function LoopInitSimPlot(SensPar::String)
         SDPopDens[i,:]=std(PopDensRepl,dims=1)
         MeanFreqTox[i]=mean(FreqToxRepl)
         SDFreqTox[i]=std(FreqToxRepl)
-        MeanDistToTox[i,:]=mean(DistToToxRepl,dims=1)
-        SDDistToTox[i,:]=std(DistToToxRepl,dims=1)
-        MeanCV[i,:]=mean(CV_Repl,dims=1)
-        SDCV[i,:]=std(CV_Repl,dims=1)
+        MeanPatchiness[i,:]=mean(PatchinessRepl,dims=1)
+        SDPatchiness[i,:]=std(PatchinessRepl,dims=1)
+        MeanNumToxNeigh[i,:]=mean(NumToxNeighRepl,dims=1)
+        SDNumToxNeigh[i,:]=std(NumToxNeighRepl,dims=1)
     end
     println(MeanPopDens)
     #println(MeanDistToTox)
@@ -222,31 +209,32 @@ function LoopInitSimPlot(SensPar::String)
 
 
     # Save data files
-    Path="D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Data\\Tox_Grazer\\"
-    if SensPar=="Dc"
-        writedlm("$(Path)SensDc.txt", [Vec_Dc, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
-        MeanDistToTox[:,1], MeanDistToTox[:,2], SDDistToTox[:,1],SDDistToTox[:,2],MeanCV[:,1],MeanCV[:,2],SDCV[:,1],SDCV[:,2]], ',')
-    elseif SensPar=="HT"
-        writedlm("$(Path)SensHT.txt", [Vec_HT, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
-        MeanDistToTox[:,1], MeanDistToTox[:,2], SDDistToTox[:,1],SDDistToTox[:,2],MeanCV[:,1],MeanCV[:,2],SDCV[:,1],SDCV[:,2]], ',')
-    elseif SensPar=="Q"
-        writedlm("$(Path)SensQ.txt", [Vec_Q, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
-        MeanDistToTox[:,1], MeanDistToTox[:,2], SDDistToTox[:,1],SDDistToTox[:,2],MeanCV[:,1],MeanCV[:,2],SDCV[:,1],SDCV[:,2]], ',')
-    elseif SensPar=="gmax"
-        writedlm("$(Path)SensGmax.txt", [Vec_gmax, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
-        MeanDistToTox[:,1], MeanDistToTox[:,2], SDDistToTox[:,1],SDDistToTox[:,2],MeanCV[:,1],MeanCV[:,2],SDCV[:,1],SDCV[:,2]], ',')
-    elseif SensPar=="HC"
-        writedlm("$(Path)SensHC.txt", [Vec_HC, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
-        MeanDistToTox[:,1], MeanDistToTox[:,2], SDDistToTox[:,1],SDDistToTox[:,2],MeanCV[:,1],MeanCV[:,2],SDCV[:,1],SDCV[:,2]], ',')
-    elseif SensPar=="rtox"
-        writedlm("$(Path)Sens_rtox.txt", [Vec_rtox, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
-        MeanDistToTox[:,1], MeanDistToTox[:,2], SDDistToTox[:,1],SDDistToTox[:,2],MeanCV[:,1],MeanCV[:,2],SDCV[:,1],SDCV[:,2]], ',')
-    elseif SensPar=="λ"
-        writedlm("$(Path)SensLambda.txt", [Vec_λ, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
-        MeanDistToTox[:,1], MeanDistToTox[:,2], SDDistToTox[:,1],SDDistToTox[:,2],MeanCV[:,1],MeanCV[:,2],SDCV[:,1],SDCV[:,2]], ',')
-
-    end
-    #XX=readdlm("$(Path)SensQ.txt",',')
+    if (SaveFile)
+        Path="D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Data\\Tox_Grazer\\"
+        if SensPar=="Dc"
+            writedlm("$(Path)SensDc.txt", [Vec_Dc, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
+            MeanPatchiness[:,1], MeanPatchiness[:,2], SDPatchiness[:,1],SDPatchiness[:,2],MeanNumToxNeigh[:,1],MeanNumToxNeigh[:,2],SDNumToxNeigh[:,1],SDNumToxNeigh[:,2]], ',')
+        elseif SensPar=="HT"
+            writedlm("$(Path)SensHT.txt", [Vec_HT, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
+            MeanPatchiness[:,1], MeanPatchiness[:,2], SDPatchiness[:,1],SDPatchiness[:,2],MeanNumToxNeigh[:,1],MeanNumToxNeigh[:,2],SDNumToxNeigh[:,1],SDNumToxNeigh[:,2]], ',')
+        elseif SensPar=="Q"
+            writedlm("$(Path)SensQ.txt", [Vec_Q, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
+            MeanPatchiness[:,1], MeanPatchiness[:,2], SDPatchiness[:,1],SDPatchiness[:,2],MeanNumToxNeigh[:,1],MeanNumToxNeigh[:,2],SDNumToxNeigh[:,1],SDNumToxNeigh[:,2]], ',')
+        elseif SensPar=="gmax"
+            writedlm("$(Path)SensGmax.txt", [Vec_gmax, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
+            MeanPatchiness[:,1], MeanPatchiness[:,2], SDPatchiness[:,1],SDPatchiness[:,2],MeanNumToxNeigh[:,1],MeanNumToxNeigh[:,2],SDNumToxNeigh[:,1],SDNumToxNeigh[:,2]], ',')
+        elseif SensPar=="HC"
+            writedlm("$(Path)SensHC.txt", [Vec_HC, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
+            MeanPatchiness[:,1], MeanPatchiness[:,2], SDPatchiness[:,1],SDPatchiness[:,2],MeanNumToxNeigh[:,1],MeanNumToxNeigh[:,2],SDNumToxNeigh[:,1],SDNumToxNeigh[:,2]], ',')
+        elseif SensPar=="rtox"
+            writedlm("$(Path)Sens_rtox.txt", [Vec_rtox, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
+            MeanPatchiness[:,1], MeanPatchiness[:,2], SDPatchiness[:,1],SDPatchiness[:,2],MeanNumToxNeigh[:,1],MeanNumToxNeigh[:,2],SDNumToxNeigh[:,1],SDNumToxNeigh[:,2]], ',')
+        elseif SensPar=="λ"
+            writedlm("$(Path)SensLambda.txt", [Vec_λ, MeanPopDens[:,1], MeanPopDens[:,2], SDPopDens[:,1],SDPopDens[:,2], MeanFreqTox, SDFreqTox,
+            MeanPatchiness[:,1], MeanPatchiness[:,2], SDPatchiness[:,1],SDPatchiness[:,2],MeanNumToxNeigh[:,1],MeanNumToxNeigh[:,2],SDNumToxNeigh[:,1],SDNumToxNeigh[:,2]], ',')
+        end
+        #XX=readdlm("$(Path)SensQ.txt",',')
+    end # end of 'if (SaveFile)'
 
     # Plotting
     Path="D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\Tox_Grazer\\Sensivity\\"
@@ -254,131 +242,133 @@ function LoopInitSimPlot(SensPar::String)
         p1=scatter(Vec_Dc, MeanPopDens, yerror = SDPopDens,xaxis=:log, yaxis=:log, ms = 6, mc=[:steelblue :red],
             legend=false,xlabel="Dc [cm^2 d^-1]", ylabel="Abundance",ylim=(10^1,10^6),left_margin=8mm,bottom_margin=6mm)
         plot!([Dc_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p2=scatter(Vec_Dc, MeanCV, yerror=SDCV, xaxis=:log, ms = 6, mc=[:steelblue :red],legend=false,
-            title="Diffusivity of cells",xlabel="Dc [cm^2 d^-1]", ylabel="Coefficient of spat. variation",left_margin=8mm,bottom_margin=6mm)
+        p2=scatter(Vec_Dc, MeanPatchiness, yerror=SDPatchiness, xaxis=:log, ms = 6, mc=[:steelblue :red],legend=false,
+            title="Diffusivity of cells",xlabel="Dc [cm^2 d^-1]", ylabel="Patchiness",left_margin=8mm,bottom_margin=6mm)
         plot!([Dc_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p3=scatter(Vec_Dc, MeanDistToTox, yerror=SDDistToTox, xaxis=:log, ms = 6, mc=[:steelblue :red],legend=false,
-            xlabel="Dc [cm^2 d^-1]", ylabel="Mean dist. to nearest toxic cell",left_margin=8mm,bottom_margin=6mm)
+        p3=scatter(Vec_Dc, MeanNumToxNeigh, yerror=SDNumToxNeigh, xaxis=:log, ms = 6, mc=[:steelblue :red],legend=false,
+            xlabel="Dc [cm^2 d^-1]", ylabel="Mean # of toxic neighbors",left_margin=8mm,bottom_margin=6mm)
         plot!([Dc_Stand], seriestype="vline",colour=[:black], ls=[:dash])
 
         pall=plot(p1,p2,p3,layout=(1,3))
         plot!(size=(1000,280),dpi=600)
         display(pall)
-        savefig("$(Path)SensDc")
+        if (SavePlot); savefig("$(Path)SensDc"); end
 
         p1=scatter(Vec_Dc./86400, MeanPopDens, yerror = SDPopDens,xaxis=:log, yaxis=:log, ms = 6, mc=[:steelblue :red],
             legend=false,xlabel="Dc [cm^2 s^-1]", ylabel="Abundance",ylim=(10^1,10^6),left_margin=8mm,bottom_margin=6mm)
         plot!([Dc_Stand/86400], seriestype="vline",colour=[:black], ls=[:dash])
-        p2=scatter(Vec_Dc/86400, MeanCV, yerror=SDCV, xaxis=:log, ms = 6, mc=[:steelblue :red],legend=false,
-            title="Diffusivity of cells",xlabel="Dc [cm^2 s^-1]", ylabel="Coefficient of spat. variation",left_margin=8mm,bottom_margin=6mm)
+        p2=scatter(Vec_Dc/86400, MeanPatchiness, yerror=SDPatchiness, xaxis=:log, ms = 6, mc=[:steelblue :red],legend=false,
+            title="Diffusivity of cells",xlabel="Dc [cm^2 s^-1]", ylabel="Patchiness",left_margin=8mm,bottom_margin=6mm)
         plot!([Dc_Stand/86400], seriestype="vline",colour=[:black], ls=[:dash])
-        p3=scatter(Vec_Dc./86400, MeanDistToTox, yerror=SDDistToTox, xaxis=:log, ms = 6, mc=[:steelblue :red],legend=false,
-            xlabel="Dc [cm^2 s^-1]", ylabel="Mean dist. to nearest toxic cell",left_margin=8mm,bottom_margin=6mm)
+        p3=scatter(Vec_Dc./86400, MeanNumToxNeigh, yerror=SDNumToxNeigh, xaxis=:log, ms = 6, mc=[:steelblue :red],legend=false,
+            xlabel="Dc [cm^2 s^-1]", ylabel="Mean # of toxic neighbors",left_margin=8mm,bottom_margin=6mm)
         plot!([Dc_Stand/86400], seriestype="vline",colour=[:black], ls=[:dash])
 
         pall=plot(p1,p2,p3,layout=(1,3))
         plot!(size=(1000,280),dpi=600)
         display(pall)
-        savefig("$(Path)SensDc_per_sec")
+        if (SavePlot); savefig("$(Path)SensDc_per_sec"); end
     elseif SensPar=="HT"
         p1=scatter(Vec_HT, MeanPopDens, yerror = SDPopDens, yaxis=:log, ms = 6, mc=[:steelblue :red],
             legend=false,xlabel="HT [nmol T cm^-2]", ylabel="Abundance",ylim=(10^1,10^6),left_margin=8mm,bottom_margin=6mm)
         plot!([HT_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p2=scatter(Vec_HT, MeanCV, yerror=SDCV, ms = 6, mc=[:steelblue :red],legend=false,
-            title="Half-sat. for toxin effect",xlabel="HT [nmol T cm^-2]", ylabel="Coefficient of spat. variation",left_margin=8mm,bottom_margin=6mm)
+        p2=scatter(Vec_HT, MeanPatchiness, yerror=SDPatchiness, ms = 6, mc=[:steelblue :red],legend=false,
+            title="Half-sat. for toxin effect",xlabel="HT [nmol T cm^-2]", ylabel="Patchiness",left_margin=8mm,bottom_margin=6mm)
         plot!([HT_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p3=scatter(Vec_HT, MeanDistToTox, yerror=SDDistToTox, ms = 6, mc=[:steelblue :red],legend=false,
-            xlabel="HT [nmol T cm^-2]", ylabel="Mean dist. to nearest toxic cell",left_margin=8mm,bottom_margin=6mm)
+        p3=scatter(Vec_HT, MeanNumToxNeigh, yerror=SDNumToxNeigh, ms = 6, mc=[:steelblue :red],legend=false,
+            xlabel="HT [nmol T cm^-2]", ylabel="Mean # of toxic neighbors",left_margin=8mm,bottom_margin=6mm)
         plot!([HT_Stand], seriestype="vline",colour=[:black], ls=[:dash])
 
         pall=plot(p1,p2,p3,layout=(1,3))
         plot!(size=(1000,280),dpi=600)
         display(pall)
-        savefig("$(Path)SensHT")
+        if (SavePlot); savefig("$(Path)SensHT"); end
     elseif SensPar=="Q"
         p1=scatter(Vec_Q, MeanPopDens, yerror = SDPopDens, yaxis=:log, ms = 6, mc=[:steelblue :red],
             legend=false, xlabel="Q [fmol d^-1]", ylabel="Abundance",ylim=(10^1,10^6),left_margin=8mm,bottom_margin=6mm)
         plot!([Q_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p2=scatter(Vec_Q, MeanCV, yerror=SDCV, ms = 6, mc=[:steelblue :red],legend=false,
-            title="Toxin leakage rate",xlabel="Q [fmol d^-1]", ylabel="Coefficient of spat. variation",left_margin=8mm,bottom_margin=6mm)
+        p2=scatter(Vec_Q, MeanPatchiness, yerror=SDPatchiness, ms = 6, mc=[:steelblue :red],legend=false,
+            title="Toxin leakage rate",xlabel="Q [fmol d^-1]", ylabel="Patchiness",left_margin=8mm,bottom_margin=6mm)
         plot!([Q_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p3=scatter(Vec_Q, MeanDistToTox, yerror=SDDistToTox, ms = 6, mc=[:steelblue :red],legend=false,
-            xlabel="Q [fmol d^-1]", ylabel="Mean dist. to nearest toxic cell",left_margin=8mm,bottom_margin=6mm)
+        p3=scatter(Vec_Q, MeanNumToxNeigh, yerror=SDNumToxNeigh, ms = 6, mc=[:steelblue :red],legend=false,
+            xlabel="Q [fmol d^-1]", ylabel="Mean # of toxic neighbors",left_margin=8mm,bottom_margin=6mm)
         plot!([Q_Stand], seriestype="vline",colour=[:black], ls=[:dash])
 
         pall=plot(p1,p2,p3,layout=(1,3))
         plot!(size=(1000,280),dpi=600)
         display(pall)
-        savefig("$(Path)SensQ")
+        if (SavePlot); savefig("$(Path)SensQ"); end
     elseif SensPar=="gmax"
         p1=scatter(Vec_gmax, MeanPopDens, yerror = SDPopDens, yaxis=:log, ms = 6, mc=[:steelblue :red],
             legend=false, xlabel="gmax [d^-1]", ylabel="Abundance",ylim=(10^1,10^6),left_margin=8mm,bottom_margin=6mm)
         plot!([amax_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p2=scatter(Vec_gmax, MeanCV, yerror=SDCV, ms = 6, mc=[:steelblue :red],legend=false,
-            title="Grazing mortality",xlabel="gmax [d^-1]", ylabel="Coefficient of spat. variation",left_margin=8mm,bottom_margin=6mm)
+        p2=scatter(Vec_gmax, MeanPatchiness, yerror=SDPatchiness, ms = 6, mc=[:steelblue :red],legend=false,
+            title="Grazing mortality",xlabel="gmax [d^-1]", ylabel="Patchiness",left_margin=8mm,bottom_margin=6mm)
         plot!([amax_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p3=scatter(Vec_gmax, MeanDistToTox, yerror=SDDistToTox, ms = 6, mc=[:steelblue :red],legend=false,
-            xlabel="gmax [d^-1]", ylabel="Mean dist. to nearest toxic cell",left_margin=8mm,bottom_margin=6mm)
+        p3=scatter(Vec_gmax, MeanNumToxNeigh, yerror=SDNumToxNeigh, ms = 6, mc=[:steelblue :red],legend=false,
+            xlabel="gmax [d^-1]", ylabel="Mean # of toxic neighbors",left_margin=8mm,bottom_margin=6mm)
         plot!([amax_Stand], seriestype="vline",colour=[:black], ls=[:dash])
 
         pall=plot(p1,p2,p3,layout=(1,3))
         plot!(size=(1000,280),dpi=600)
         display(pall)
-        savefig("$(Path)SensGmax")
+        if (SavePlot); savefig("$(Path)SensGmax"); end
     elseif SensPar=="HC"
         p1=scatter(Vec_HC, MeanPopDens, yerror = SDPopDens, yaxis=:log, ms = 6, mc=[:steelblue :red],
             legend=false, xlabel="HN [nmol N cm^-2]", ylabel="Abundance",ylim=(10^1,10^6),left_margin=8mm,bottom_margin=6mm)
         plot!([HC_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p2=scatter(Vec_HC, MeanCV, yerror=SDCV, ms = 6, mc=[:steelblue :red],legend=false,
-            title="Half-sat. for nutrients",xlabel="HN [nmol N cm^-2]", ylabel="Coefficient of spatial variation",left_margin=8mm,bottom_margin=6mm)
+        p2=scatter(Vec_HC, MeanPatchiness, yerror=SDPatchiness, ms = 6, mc=[:steelblue :red],legend=false,
+            title="Half-sat. for nutrients",xlabel="HN [nmol N cm^-2]", ylabel="Patchiness",left_margin=8mm,bottom_margin=6mm)
         plot!([HC_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p3=scatter(Vec_HC, MeanDistToTox, yerror=SDDistToTox, ms = 6, mc=[:steelblue :red],legend=false,
-            xlabel="HN [nmol N cm^-2]", ylabel="Mean dist. to nearest toxic cell",left_margin=8mm,bottom_margin=6mm)
+        p3=scatter(Vec_HC, MeanNumToxNeigh, yerror=SDNumToxNeigh, ms = 6, mc=[:steelblue :red],legend=false,
+            xlabel="HN [nmol N cm^-2]", ylabel="Mean # of toxic neighbors",left_margin=8mm,bottom_margin=6mm)
         plot!([HC_Stand], seriestype="vline",colour=[:black], ls=[:dash])
 
         pall=plot(p1,p2,p3,layout=(1,3))
         plot!(size=(1000,280),dpi=600)
         display(pall)
-        savefig("$(Path)SensHC")
+        if (SavePlot); savefig("$(Path)SensHC"); end
     elseif SensPar=="rtox"
         p1=scatter(Vec_rtox, MeanPopDens, yerror = SDPopDens, yaxis=:log, ms = 6, mc=[:steelblue :red],
             legend=false, xlabel="b_max,tox [d^-1]", ylabel="Abundance",ylim=(10^1,10^6),left_margin=8mm,bottom_margin=6mm)
         plot!([rtox_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p2=scatter(Vec_rtox, MeanCV, yerror=SDCV, ms = 6, mc=[:steelblue :red],legend=false,
-            title="Max. growth rate toxic cells",xlabel="b_max,tox [d^-1]", ylabel="Coefficient of spat. variation",left_margin=8mm,bottom_margin=6mm)
+        p2=scatter(Vec_rtox, MeanPatchiness, yerror=SDPatchiness, ms = 6, mc=[:steelblue :red],legend=false,
+            title="Max. growth rate toxic cells",xlabel="b_max,tox [d^-1]", ylabel="Patchiness",left_margin=8mm,bottom_margin=6mm)
         plot!([rtox_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p3=scatter(Vec_rtox, MeanDistToTox, yerror=SDDistToTox, ms = 6, mc=[:steelblue :red],legend=false,
-            xlabel="b_max,tox [d^-1]", ylabel="Mean dist. to nearest toxic cell",left_margin=8mm,bottom_margin=6mm)
+        p3=scatter(Vec_rtox, MeanNumToxNeigh, yerror=SDNumToxNeigh, ms = 6, mc=[:steelblue :red],legend=false,
+            xlabel="b_max,tox [d^-1]", ylabel="Mean # of toxic neighbors",left_margin=8mm,bottom_margin=6mm)
         plot!([rtox_Stand], seriestype="vline",colour=[:black], ls=[:dash])
 
         pall=plot(p1,p2,p3,layout=(1,3))
         plot!(size=(1000,280),dpi=600)
         display(pall)
-        savefig("$(Path)Sensrtox")
+        if (SavePlot); savefig("$(Path)Sensrtox"); end
     elseif SensPar=="λ"
         p1=scatter(Vec_λ, MeanPopDens, yerror = SDPopDens, yaxis=:log, ms = 6, mc=[:steelblue :red],
             legend=false, xlabel="lambda [d^-1]", ylabel="Abundance",ylim=(10^1,10^6),left_margin=8mm,bottom_margin=6mm)
         plot!([λ_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p2=scatter(Vec_λ, MeanCV, yerror=SDCV, ms = 6, mc=[:steelblue :red],legend=false,
-            title="Toxin decay rate",xlabel="lambda [d^-1]", ylabel="Coefficient of spat. variation",left_margin=8mm,bottom_margin=6mm)
+        p2=scatter(Vec_λ, MeanPatchiness, yerror=SDPatchiness, ms = 6, mc=[:steelblue :red],legend=false,
+            title="Toxin decay rate",xlabel="lambda [d^-1]", ylabel="Patchiness",left_margin=8mm,bottom_margin=6mm)
         plot!([λ_Stand], seriestype="vline",colour=[:black], ls=[:dash])
-        p3=scatter(Vec_λ, MeanDistToTox, yerror=SDDistToTox, ms = 6, mc=[:steelblue :red],legend=false,
-            xlabel="lambda [d^-1]", ylabel="Mean dist. to nearest toxic cell",left_margin=8mm,bottom_margin=6mm)
+        p3=scatter(Vec_λ, MeanNumToxNeigh, yerror=SDNumToxNeigh, ms = 6, mc=[:steelblue :red],legend=false,
+            xlabel="lambda [d^-1]", ylabel="Mean # of toxic neighbors",left_margin=8mm,bottom_margin=6mm)
         plot!([λ_Stand], seriestype="vline",colour=[:black], ls=[:dash])
 
         pall=plot(p1,p2,p3,layout=(1,3))
         plot!(size=(1000,280),dpi=600)
         display(pall)
-        savefig("$(Path)SensLambda")
+        if (SavePlot); savefig("$(Path)SensLambda"); end
     end
 
 end
 
-SensParVec=["Dc","rtox","HT","Q","λ","gmax","HC"]
-#SensParVec=["rtox","λ"]
+#SensParVec=["Dc","rtox","HT","Q","λ","gmax","HC"]
+SensParVec=["Q"]
+SaveFile=false
+SavePlot=false
 
 for i in 1:length(SensParVec)
-    @time LoopInitSimPlot(SensParVec[i])
+    @time LoopInitSimPlot(SensParVec[i],SaveFile,SavePlot)
 end
 
 # writedlm("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Data\\gmax_Mean&SD_Dens&Freq.csv",
