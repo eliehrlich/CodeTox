@@ -9,13 +9,13 @@ solar = ColorSchemes.solar
 # Parameter
 D=0.864 # [cm^2 d^-1]
 Q=1.0   # [fmol d^-1]
-HT=0.01 # Half-saturation constant [fmol cm^-2]
+HT=0.8#0.01 # Half-saturation constant [fmol cm^-2]
 λ=0.2  # [d^-1]
 
 dt=0.2
-a=0.4   # max. grazing rate
-G=-exp(-atox*dt)+1 # maximum grazing loss probability
-G=0.08
+a=0.2   # max. grazing rate
+G=-exp(-a*dt)+1 # maximum grazing loss probability
+G=0.039#0.08
 
 
 n = 2001
@@ -35,7 +35,7 @@ g_fct=G.*(1.0 .- T_fct./(HT.+T_fct))
 p=plot(T_fct,g_fct, lc=:black,legend=false,reuse=false,xlabel="Toxin conc. T",ylabel="Graz. loss prob. g")
 plot!(margin=5mm)
 display(p)
-savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\Tox_Grazer\\ToxinGrazProb_Relship")
+# savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\Tox_Grazer\\ToxinGrazProb_Relship")
 
 p1=plot(x,T,ylim=(0,2),lc=:black,legend=false,reuse=false,xlabel="x [cm]",ylabel="Toxin conc. T")
 p2=plot(x,g,ylim=(0,G),lc=:black,legend=false,reuse=false,xlabel="x [cm]",ylabel="Graz. loss prob. g")
@@ -44,7 +44,7 @@ p2=plot(x,g,ylim=(0,G),lc=:black,legend=false,reuse=false,xlabel="x [cm]",ylabel
 pall=plot(p1,p2)
 plot!(margin=5mm,size=(600,280))
 display(pall)
-savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\Tox_Grazer\\ToxinGrazDistrib")
+#savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\Tox_Grazer\\ToxinGrazDistrib_H_T08")
 
 # Q=range(0.1,5.1,step=0.1)
 # r_GmaxHalf=zeros(length(Q))

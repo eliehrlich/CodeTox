@@ -14,83 +14,126 @@ using .IBM_FunctModule
 
 #Random.seed!(1234)
 
-## Parameters
-L=2*10^3        # Number of discrete 'positions' per dimension (L=10^4 --> resolution 0.0001 = 1mm)
-tmax=10       # simulation steps
-N0=4*10^4       # initial number of cells
-c0=0.1        # initial frequency of toxic cells
-Δ=0.001       # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
-U=0.1         # amplitude of turbulence movement wave
-pC_max=0.4   # max. birth probability of toxic cells
-qC=0.2       # death probability of toxic cells
-pD_max=0.5   # max. birth probability of non-toxic cells
-qD=0.2       # death probability of non-toxic cells
-gC_max=0.2    # maximum grazing loss probability of toxic cells
-gD_max=0.2    # maximum grazing loss probability of non-toxic cells
-Δ_T=0.001     # standard dev. of multivariate Gaussian distributed toxin effect
-Δ_Comp=0.001     # standard dev. of multivariate Gaussian distributed competition effect
-H=2           # toxicity at which grazing loss probability is halfed
-Nmax=10^6     # total resources in units of cells (maximum number of cells)
-HC=8       # half-sat. of toxic cells
-HD=8      # half-sat. of non-toxic cells
+# Parameters
+## Resolution: Time step [days], grid cell size [cm]
+dt=1.0
+dx=0.1
 
-# Steady of non-toxic cell monoculture
-R=(qD+gD_max)/pD_max*HD/(1-(qD+gD_max)/pD_max)
-D=Nmax-R
+## Space width [cm] and simulation time [days]
+L=50
+tmax=10
+
+## Number of grid cells on each axis, number of non-toxic and toxic cells, number of time steps
+Ngrid=ceil(Int, L/dx)
+Nnon=1000
+Ntox=100
+Nt=ceil(Int, tmax/dt)
+
+## Decay rate of toxins [d^-1], toxin leakage rate [1 fmol d^-1]
+λ=0.2
+Q=1.0
+
+## Max. growth rate, natural mortality rate, max. grazing (loss) rate [d^-1]
+rtox=0.38
+rnon=0.40
+dtox=0.05
+dnon=0.05
+atox=0.22
+anon=0.22
+
+## Max. birth probabilities, natural death probability and maximum graz. mortality probability
+Ptox=0.4 #exp(rtox*dt)-1     #0.45
+Pnon=0.5 #exp(rnon*dt)-1     #0.5
+mtox=0.2 #-exp(-dtox*dt)+1   #0.15
+mnon=0.2 #-exp(-dnon*dt)+1   #0.15
+Gtox=0.2 #-exp(-atox*dt)+1   #0.2
+Gnon=0.2 #-exp(-anon*dt)+1   #0.2
+
+## Half-saturation constants for competition effect and toxin effect [fmol dx^-2]
+HC=8
+HT=2  #0.8*dx^2 #0.02*dx^2
+
+## Diffusivity of molecules (nutrients and toxins) and cells [cm^2 d^-1]
+Dm=0.864
+Dc=8.640 #8.640
+
+## Average diffusion distance of cells and molecules [units: dx=number of grid cells] per time step dt
+Δ_m=sqrt(2*Dm*dt)/dx    # standard dev. of multivariate Gaussian distributed competition and toxin effect
+Δ_c=sqrt(2*Dc*dt)/dx    # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
+
+## Turbulence
+U=0.1         # amplitude of turbulence movement wave
+
+# ## Parameters
+# L=2*10^3        # Number of discrete 'positions' per dimension (L=10^4 --> resolution 0.0001 = 1mm)
+# tmax=10       # simulation steps
+# N0=4*10^4       # initial number of cells
+# c0=0.1        # initial frequency of toxic cells
+# Δ=0.001       # root mean square (standard dev.) of Gaussian distributed random variable for diffusion
+#
+# Δ_T=0.001     # standard dev. of multivariate Gaussian distributed toxin effect
+# Δ_Comp=0.001     # standard dev. of multivariate Gaussian distributed competition effect
+# H=2           # toxicity at which grazing loss probability is halfed
+# Nmax=10^6     # total resources in units of cells (maximum number of cells)
+# HC=8       # half-sat. of toxic cells
+# HD=8      # half-sat. of non-toxic cells
+#
+# # Steady of non-toxic cell monoculture
+# R=(qD+gD_max)/pD_max*HD/(1-(qD+gD_max)/pD_max)
+# D=Nmax-R
 
 ## Predefine local toxicity environment around one cell
-xTox=range(-3*Δ_T,3*Δ_T,step=1/L)   # local x-range
-yTox=range(-3*Δ_T,3*Δ_T,step=1/L)   # local y-range
+xTox=range(-2*Δ_m,2*Δ_m,step=dx)   # local x-range
+yTox=range(-2*Δ_m,2*Δ_m,step=dx)   # local y-range
 n=length(xTox)                  # number of patches along range
 nC=floor(Int,(n-1)/2)           # number of patches from outer margin of local env. to central toxic cell
 LocalTox=zeros(n,n)             # local toxicity environment around one toxic cell
 for i in 1:n, j in 1:n
-    LocalTox[i,j] = pdf(MvNormal([0.0; 0.0], [Δ_T^2 0.0; 0.0 Δ_T^2]),[xTox[i];yTox[j]]) # pdf of multivariate normal distribution
+    LocalTox[i,j] = pdf(MvNormal([0.0; 0.0], [Δ_m^2 0.0; 0.0 Δ_m^2]),[xTox[i];yTox[j]]) # pdf of multivariate normal distribution
 end
-MaxP=pdf(MvNormal([0.0; 0.0], [Δ_T^2 0.0; 0.0 Δ_T^2]),[0;0]) # probability density at mean x and mean y
+MaxP=pdf(MvNormal([0.0; 0.0], [Δ_m^2 0.0; 0.0 Δ_m^2]),[0;0]) # probability density at mean x and mean y
 LocalTox=LocalTox./MaxP         # rescale the values --> between 0 and 1
-#surface(xTox,yTox,LocalTox, size=[800,480],camera=(50,50),xlabel="x",ylabel="y",zlabel="toxin conc.",dpi=600)
+surface(xTox,yTox,LocalTox, size=[800,480],camera=(50,50),xlabel="x",ylabel="y",zlabel="toxin conc.",dpi=600)
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\LocalToxEnv")
 
 ## Predefine local competition environment around one cell
-xComp=range(-3*Δ_Comp,3*Δ_Comp,step=1/L)   # local x-range
-yComp=range(-3*Δ_Comp,3*Δ_Comp,step=1/L)   # local y-range
+xComp=range(-2*Δ_m,2*Δ_m,step=dx)   # local x-range
+yComp=range(-2*Δ_m,2*Δ_m,step=dx)   # local y-range
 n=length(xComp)                  # number of patches along range
 nComp=floor(Int,(n-1)/2)           # number of patches from outer margin of local env. to central toxic cell
 LocalComp=zeros(n,n)             # local toxicity environment around one toxic cell
 for i in 1:n, j in 1:n
-    LocalComp[i,j] = pdf(MvNormal([0.0; 0.0], [Δ_Comp^2 0.0; 0.0 Δ_Comp^2]),[xComp[i];yComp[j]]) # pdf of multivariate normal distribution
+    LocalComp[i,j] = pdf(MvNormal([0.0; 0.0], [Δ_m^2 0.0; 0.0 Δ_m^2]),[xComp[i];yComp[j]]) # pdf of multivariate normal distribution
 end
-MaxPComp=pdf(MvNormal([0.0; 0.0], [Δ_Comp^2 0.0; 0.0 Δ_Comp^2]),[0;0]) # probability density at mean x and mean y
+MaxPComp=pdf(MvNormal([0.0; 0.0], [Δ_m^2 0.0; 0.0 Δ_m^2]),[0;0]) # probability density at mean x and mean y
 LocalComp=LocalComp./MaxPComp
 
 ## Initialization
-AC = rand(0:L,(floor(Int,c0*N0),2))  # Toxic cells --> random x- and y-positions between 0 and L
-AD = rand(0:L,(floor(Int,(1-c0)*N0),2))  # Non-toxic cells --> random x- and y-positions between 0 and L
+Atox = rand(1:Ngrid,(Ntox,2))  # Toxic cells --> random x- and y-positions
+Anon = rand(1:Ngrid,(Nnon,2)) # Non-toxic cells --> random x- and y-positions
 
-# scatter(AD[:,1]./L,AD[:,2]./L,xlabel="x",ylabel="y",
+# scatter(Anon[:,1].*dx,Anon[:,2].*dx,xlabel="x",ylabel="y",
 #     mc=:steelblue,msc=:black,ms=2,msw=0.0,
 #     legend=false,dpi=600,reuse=false)
-# scatter!(AC[:,1]./L,AC[:,2]./L,mc=:red,msc=:black,ms=2,msw=0.0)
+# scatter!(Atox[:,1].*dx,Atox[:,2].*dx,mc=:red,msc=:black,ms=2,msw=0.0)
 # xlims!((0.0,1.0))
 # ylims!((0.0,1.0))
 
 #savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\Tox_AdvDiff_t0")
 
-FreqC_timeser=zeros(tmax+1)                             # frequency of toxic cells
-FreqC_timeser[1]=size(AC,1)/(size(AC,1)+size(AD,1))     # initial frequency of toxic cells
-
-PopDens=zeros(tmax+1,2)                                 # population density of toxic and non-toxic cells
-PopDens[1,:]=[size(AC,1),size(AD,1)]
+FreqTox=zeros(Nt+1)             # frequency of toxic cells
+FreqTox[1]=Ntox/(Ntox+Nnon)     # initial frequency of toxic cells
+PopDens=zeros(Nt+1,2)           # population density of toxic and non-toxic cells
+PopDens[1,:]=[Ntox,Nnon]        # initial population densities
 
 ## Simulate
-function Simulate(AC, AD, FreqC_timeser, PopDens, tmax, LocalTox, LocalComp, L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
-    @time for t in 1:tmax
-        AC, AD = IBM_FunctModule.AdvDiffToxLocal(AC,AD,LocalTox,LocalComp,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
+function Simulate(Atox, Anon, FreqTox, PopDens, tmax, LocalTox, LocalComp, L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
+    @time for t in 1:Nt
+        Atox, Anon = IBM_FunctModule.AdvDiffToxLocal(AC,AD,LocalTox,LocalComp,L,Δ,U,pC_max,qC,pD_max,qD,gC_max,gD_max,H,Nmax,HC,HD,nC,nComp)
 
-        FreqC_timeser[t+1]=size(AC,1)/(size(AC,1)+size(AD,1))     # frequency of toxic cells
-        PopDens[t+1,:]=[size(AC,1),size(AD,1)]
+        FreqTox[t+1]=size(Atox,1)/(size(Atox,1)+size(Anon,1))     # frequency of toxic cells
+        PopDens[t+1,:]=[size(Atox,1),size(Anon,1)]
     end
 
     return AC, AD, FreqC_timeser, PopDens
@@ -117,4 +160,4 @@ plot(p1,p2,p3, layout=@layout [a{0.75h} ; b c])#, size=(600,400))#grid(3,1,heigh
 plot!(size=(600,600))#,left_margin=10mm,bottom_margin=[10mm 1mm])
 plot!(title=["a" "b" "c"],title_location=:left)
 
-savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff_Tox_Local_NoNonTox_t$tmax")
+# savefig("D:\\Forschung\\Denmark Ocean Life\\Toxicity Project\\Figures\\AdvDiff\\AdvDiff_Tox_Local_NoNonTox_t$tmax")

@@ -1,7 +1,7 @@
 module IBM_Tox_Functions_PDE
 
     export Sim_Tox_Graz_PDE
-    export Sim_Tox_Graz_PDE1
+    export Sim_Tox_Allelopathy_PDE
 
     using FastConv
     using StatsBase
@@ -123,6 +123,113 @@ module IBM_Tox_Functions_PDE
 
         return C, T, xnon, ynon, xtox, ytox, FreqTox, PopDens
     end
+
+    function Sim_Tox_Allelopathy_PDE(C::Array{Float64,2},T::Array{Float64,2},x1non::Array{Int64,1},y1non::Array{Int64,1},
+                        x1tox::Array{Int64,1},y1tox::Array{Int64,1},x2::Array{Int64,1},y2::Array{Int64,1},FreqTox::Array{Float64,1},PopDens ::Array{Int64,2},
+                        Ngrid::Int64,Nt::Int64,λ::Float64,Q::Float64,P1tox::Float64,P1non::Float64,P2::Float64,m1tox::Float64,
+                        m1non::Float64,m2::Float64,HC::Float64,HT::Float64,
+                        qN::Float64,dt::Float64,kernel_2D::Array{Float64,2},Δ::Float64)
+        @inbounds for t in 1:Nt
+            ## 1. Birth and death of cells
+            Pos1Tox=LinIndex(x1tox,y1tox,Ngrid)
+            Pos1Non=LinIndex(x1non,y1non,Ngrid)
+            Pos2=LinIndex(x2,y2,Ngrid)
+            p1tox=@. P1tox*C[Pos1Tox]/(HC+C[Pos1Tox])
+            p1non=@. P1non*C[Pos1Non]/(HC+C[Pos1Non])
+            p2=@. P2*C[Pos2]/(HC+C[Pos2])*(1.0-T[Pos2]/(HT+T[Pos2]))
+
+            ### Birth
+            x=vcat(x1tox,x1non,x2)
+            y=vcat(y1tox,y1non,y2)
+            p=vcat(p1tox,p1non,p2)
+
+            CellsReprod=BirthDeathDice(p)
+            IndexReprod=(1:length(CellsReprod))[CellsReprod]
+            shuffle!(IndexReprod) # random order
+            x1tox_birth=zeros(Int64,0) # initialize empty Array
+            y1tox_birth=zeros(Int64,0)
+            x1non_birth=zeros(Int64,0)
+            y1non_birth=zeros(Int64,0)
+            x2_birth=zeros(Int64,0)
+            y2_birth=zeros(Int64,0)
+            # Threads.@threads
+            @inbounds for i in IndexReprod
+                if C[x[i],y[i]]>=qN
+                    if i <= length(x1tox)
+                        push!(x1tox_birth,x[i])
+                        push!(y1tox_birth,y[i])
+                    elseif i <= (length(x1tox)+length(x1non))
+                        push!(x1non_birth,x[i])
+                        push!(y1non_birth,y[i])
+                    else
+                        push!(x2_birth,x[i])
+                        push!(y2_birth,y[i])
+                    end
+                    C[x[i],y[i]] -= qN
+                end
+            end
+
+            ### Death
+            CellsDead1Tox=BirthDeathDice(repeat([m1tox],length(x1tox)))                # Indices of dying cells (marked with 'true')
+            CellsDead1Non=BirthDeathDice(repeat([m1non],length(x1non)))
+            CellsDead2=BirthDeathDice(repeat([m2],length(x2)))
+            x1tox_dead=x1tox[CellsDead1Tox]
+            y1tox_dead=y1tox[CellsDead1Tox]
+            x1non_dead=x1non[CellsDead1Non]
+            y1non_dead=y1non[CellsDead1Non]
+            x2_dead=x2[CellsDead2]
+            y2_dead=y2[CellsDead2]
+
+            ### Update population
+            x1tox=vcat(x1tox[.!(CellsDead1Tox)],x1tox_birth)
+            y1tox=vcat(y1tox[.!(CellsDead1Tox)],y1tox_birth)
+            x1non=vcat(x1non[.!(CellsDead1Non)],x1non_birth)
+            y1non=vcat(y1non[.!(CellsDead1Non)],y1non_birth)
+            x2=vcat(x2[.!(CellsDead2)],x2_birth)
+            y2=vcat(y2[.!(CellsDead2)],y2_birth)
+
+            FreqTox[t+1]=length(x1tox)/(length(x1tox)+length(x1non))
+            PopDens[t+1,:]=[length(x1non),length(x1tox),length(x2)]
+
+            ## 2. Recycling of Nutrients
+            PosDeath=LinIndex(vcat(x1tox_dead,x1non_dead,x2_dead),vcat(y1tox_dead,y1non_dead,y2_dead),Ngrid)   # Linear index - position of new born cells
+            # @inbounds for i in PosDeath
+            #     C[i] += qN
+            # end
+            RecyclN_perPatch=length(PosDeath)/length(C)*qN
+            C.=C.+RecyclN_perPatch
+
+            ## 3. Toxin leakage and decay
+            Pos1Tox=LinIndex(x1tox,y1tox,Ngrid)
+            T_decay=λ.*dt.*T
+            ### Leak toxins
+            @inbounds for i in Pos1Tox
+                T[i] += Q*dt
+            end
+            ### Decay toxins
+            T.=T.-T_decay
+
+            ## 4. Movement/Diffusion of cells, nutrients and toxins
+            ### Move cells
+            x1tox = Move(x1tox,Ngrid,Δ)
+            y1tox = Move(y1tox,Ngrid,Δ)
+            x1non = Move(x1non,Ngrid,Δ)
+            y1non = Move(y1non,Ngrid,Δ)
+            x2 = Move(x2,Ngrid,Δ)
+            y2 = Move(y2,Ngrid,Δ)
+
+            ### Diffuse nutrients
+            C=Diffusion(C,kernel_2D)
+
+            ### Diffuse toxins
+            T=Diffusion(T,kernel_2D)
+
+        end
+
+        return C, T, x1non, y1non, x1tox, y1tox, x2, y2, FreqTox, PopDens
+    end
+
+
 end #module
 
 
